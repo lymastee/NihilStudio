@@ -17,6 +17,8 @@ struct NihilUIVertex
     gs::vec4            color;
 };
 
+typedef gs::string NihilString;
+
 class __declspec(novtable) NihilGeometry abstract
 {
 public:
@@ -58,12 +60,13 @@ typedef std::unordered_map<int, NihilLinkedPoints> NihilPointLinkage;
 class NihilPolygon
 {
 public:
-    NihilPolygon();
+    NihilPolygon(NihilRenderer* renderer);
     ~NihilPolygon();
-    int loadPolygonFromTextStream(const gs::string& src, int start);
+    int loadPolygonFromTextStream(const NihilString& src, int start);
 
 protected:
-    NihilGeometry*          m_geometry;
+    NihilRenderer*          m_renderer = nullptr;
+    NihilGeometry*          m_geometry = nullptr;
     NihilPointList          m_pointList;
     NihilIndexList          m_indexList;
     NihilPointLinkage       m_pointLinkage;     // used for calculate the points normal
@@ -88,7 +91,7 @@ public:
     NihilRenderer* getRenderer() const { return m_renderer; }
     HWND getHwnd() const { return m_hwnd; }
     WNDPROC getOldWndProc() const { return m_oldWndProc; }
-    bool loadFromTextStream(const gs::string& src);
+    bool loadFromTextStream(const NihilString& src);
 
 private:
     static LRESULT CALLBACK wndProc(HWND, UINT, WPARAM, LPARAM);
@@ -101,6 +104,8 @@ protected:
     NihilPolygonList        m_polygonList;
 
 protected:
+    void destroyObjects();
     bool setupWindow(HWND hwnd);
     bool setupRenderer();
+    int loadPolygonFromTextStream(const NihilString& src, int start);   // -1: failed
 };

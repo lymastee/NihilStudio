@@ -33,6 +33,7 @@ void NihilCore::resizeWindow()
 
 void NihilCore::destroy()
 {
+    destroyObjects();
     if (m_hwnd)
     {
         m_instMap.erase(m_hwnd);
@@ -53,20 +54,59 @@ void NihilCore::render()
         m_renderer->render();
 }
 
-static const gs::gchar nihilBlanks[] = _t(" \t\v\r\n\f");
+#define NIHIL_BLANKS _t(" \t\v\r\n\f")
 
 static int skipBlankCharactors(const gs::string& src, int start)
 {
-    int p = (int)src.find_first_not_of(nihilBlanks, start);
-    if (p == gs::string::npos)
+    int p = (int)src.find_first_not_of(NIHIL_BLANKS, start);
+    if (p == NihilString::npos)
         return src.length();
     return p;
 }
 
-bool NihilCore::loadFromTextStream(const gs::string& src)
+static int prereadSectionName(const NihilString& src, NihilString& name, int start)
+{
+    int p = (int)src.find_first_of(NIHIL_BLANKS "{", start);
+    if (p == NihilString::npos)
+        return src.length();
+    if (p)
+        name.assign(src.c_str() + start, p);
+    return p + start;
+}
+
+bool NihilCore::loadFromTextStream(const NihilString& src)
 {
     int start = skipBlankCharactors(src, 0);
+    if (start == src.length())  // eof
+        return false;
+    NihilString prename;
+    int next = prereadSectionName(src, prename, start);
+    if (next == src.length())   // eof
+        return false;
+    do
+    {
+        if (prename == _t("Polygon"))
+        {
+            next = loadPolygonFromTextStream(src, start = next);
+            if (next == -1)
+                return false;
+        }
+        // todo:
+        else
+        {
+            ASSERT(!"Unknown section name.");
+            return false;
+        }
+        next = prereadSectionName(src, prename, start = next);
+    } while (next != src.length());
     return true;
+}
+
+void NihilCore::destroyObjects()
+{
+    for (auto* p : m_polygonList)
+        delete p;
+    m_polygonList.clear();
 }
 
 bool NihilCore::setupWindow(HWND hwnd)
@@ -90,6 +130,14 @@ bool NihilCore::setupRenderer()
     return false;
 #endif
     return false;
+}
+
+int NihilCore::loadPolygonFromTextStream(const NihilString& src, int start)
+{
+    NihilPolygon* polygon = new NihilPolygon(m_renderer);
+    ASSERT(polygon);
+    m_polygonList.push_back(polygon);
+    return polygon->loadPolygonFromTextStream(src, start);
 }
 
 LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -116,4 +164,25 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
     }
     return oldWndProc(hwnd, msg, wParam, lParam);
+}
+
+NihilPolygon::NihilPolygon(NihilRenderer* renderer)
+{
+    ASSERT(renderer);
+    m_renderer = renderer;
+    m_geometry = renderer->addGeometry();
+    ASSERT(m_geometry);
+}
+
+NihilPolygon::~NihilPolygon()
+{
+    ASSERT(m_renderer && m_geometry);
+    m_renderer->removeGeometry(m_geometry);
+    m_renderer = nullptr;
+    m_geometry = nullptr;
+}
+
+int NihilPolygon::loadPolygonFromTextStream(const NihilString& src, int start)
+{
+    return -1;
 }

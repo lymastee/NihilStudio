@@ -373,7 +373,7 @@ void NihilDx11Renderer::beginRender()
     ASSERT(m_immediateContext);
     m_immediateContext->OMSetRenderTargets(1, &m_rtv, m_dsv);
 
-    static float ccr[] = { 0.188f, 0.169f, 0.208f, 1.f };
+    static float ccr[] = { 0.275f, 0.31f, 0.349f, 1.f };
     m_immediateContext->ClearRenderTargetView(m_rtv, ccr);
     m_immediateContext->ClearDepthStencilView(m_dsv, D3D11_CLEAR_DEPTH, 1.f, 0);
 }
