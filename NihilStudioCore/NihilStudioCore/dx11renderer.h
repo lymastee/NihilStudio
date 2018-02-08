@@ -9,8 +9,8 @@
 #include <unordered_set>
 
 // compiled shader
-//#include "vs.h"
-//#include "ps.h"
+#include "geometry_vs.h"
+#include "geometry_ps.h"
 
 class NihilDx11Geometry :
     public NihilGeometry
@@ -23,6 +23,12 @@ public:
     virtual bool createVertexStream(NihilVertex vertices[], int size) override;
     virtual bool createIndexStream(int indices[], int size) override;
     virtual bool updateVertexStream(NihilVertex vertices[], int size) override;
+    virtual void setLocalMat(const gs::matrix& m) override;
+
+public:
+    const gs::matrix& getLocalMat() const { return m_localMat; }
+    void setupIndexVertexBuffers(NihilDx11Renderer* renderer);
+    void render(NihilDx11Renderer* renderer);
 
 private:
     NihilDx11Renderer*          m_renderer = nullptr;
@@ -30,6 +36,7 @@ private:
     ID3D11Buffer*               m_ib = nullptr;
     int                         m_verticeCount = 0;
     int                         m_indicesCount = 0;
+    gs::matrix                  m_localMat;
 };
 
 class NihilDx11UIObject :
@@ -59,6 +66,12 @@ class NihilDx11Renderer :
     public NihilRenderer
 {
 public:
+    struct ConstantBuffer
+    {
+        gs::matrix              mvp;
+    };
+
+public:
     NihilDx11Renderer();
     virtual ~NihilDx11Renderer();
 
@@ -66,10 +79,15 @@ public:
     virtual bool setup(HWND hwnd) override;
     virtual void render() override;
     virtual void notifyResize() override;
+    virtual void setWorldMat(const gs::matrix& m) override;
     virtual NihilGeometry* addGeometry() override;
     virtual NihilUIObject* addUIObject() override;
     virtual void removeGeometry(NihilGeometry* ptr) override;
     virtual void removeUIObject(NihilUIObject* ptr) override;
+
+public:
+    ID3D11Device* getDevice() const { return m_device; }
+    ID3D11DeviceContext* getImmediateContext() const { return m_immediateContext; }
 
 protected:
     HWND                        m_hwnd = 0;
@@ -89,15 +107,19 @@ protected:
     ID3D11InputLayout*          m_uiInputLayout = nullptr;
     NihilGeometrySet            m_geometrySet;
     NihilUIObjectSet            m_uiSet;
+    gs::matrix                  m_worldMat;
 
 private:
     void destroy();
     void clearRenderSets();
     void setupViewpoints(UINT width, UINT height);
+    bool setupShaderOfGeometry();
+    bool setupShaderOfUI();
     void beginRender();
     void endRender();
     void renderGeometryBatch();
     void renderUIBatch();
+    void setupConstantBufferForGeometry(NihilDx11Geometry* geometry);
 };
 
 

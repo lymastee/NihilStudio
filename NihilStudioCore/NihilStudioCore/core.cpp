@@ -56,6 +56,21 @@ void NihilCore::render()
 
 #define NIHIL_BLANKS _t(" \t\v\r\n\f")
 
+static bool badEof(const gs::string& src, int curr)
+{
+    if (curr < 0)
+    {
+        ASSERT(!"An error was already existed.");
+        return true;
+    }
+    if (curr >= src.length())
+    {
+        ASSERT("Unexpected end of file.");
+        return true;
+    }
+    return false;
+}
+
 static int skipBlankCharactors(const gs::string& src, int start)
 {
     int p = (int)src.find_first_not_of(NIHIL_BLANKS, start);
@@ -70,21 +85,48 @@ static int prereadSectionName(const NihilString& src, NihilString& name, int sta
     if (p == NihilString::npos)
         return src.length();
     if (p)
-        name.assign(src.c_str() + start, p);
-    return p + start;
+        name.assign(src.c_str() + start, p - start);
+    return p;
+}
+
+static int enterSection(const NihilString& src, int start)
+{
+    ASSERT(start < src.length());
+    if (src.at(start) == _t('{'))
+        return ++start;
+    int next = skipBlankCharactors(src, start);
+    if (badEof(src, next) || src.at(next) != _t('{'))
+        return -1;
+    return ++next;
+}
+
+static int readLineOfSection(const NihilString& src, NihilString& line, int start)
+{
+    ASSERT(start < src.length());
+    int p = (int)src.find_first_of(_t("\r\n}"), start);
+    if (badEof(src, p))
+        return -1;
+    if (src.at(p) == _t('}'))
+    {
+        ASSERT(!"Unexpected end of section.");
+        return -1;
+    }
+    line.assign(src, start, p - start);
+    return (int)src.find_first_not_of(_t("\r\n"), p);
 }
 
 bool NihilCore::loadFromTextStream(const NihilString& src)
 {
     int start = skipBlankCharactors(src, 0);
-    if (start == src.length())  // eof
+    if (badEof(src, start))
         return false;
     NihilString prename;
     int next = prereadSectionName(src, prename, start);
-    if (next == src.length())   // eof
+    if (badEof(src, next))
         return false;
     do
     {
+        // format start with: Polygon {
         if (prename == _t("Polygon"))
         {
             next = loadPolygonFromTextStream(src, start = next);
@@ -98,7 +140,7 @@ bool NihilCore::loadFromTextStream(const NihilString& src)
             return false;
         }
         next = prereadSectionName(src, prename, start = next);
-    } while (next != src.length());
+    } while (next < src.length());
     return true;
 }
 
@@ -166,6 +208,11 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return oldWndProc(hwnd, msg, wParam, lParam);
 }
 
+void NihilSceneConfig::setup()
+{
+
+}
+
 NihilPolygon::NihilPolygon(NihilRenderer* renderer)
 {
     ASSERT(renderer);
@@ -184,5 +231,245 @@ NihilPolygon::~NihilPolygon()
 
 int NihilPolygon::loadPolygonFromTextStream(const NihilString& src, int start)
 {
-    return -1;
+    int next = enterSection(src, start);
+    if (badEof(src, next))
+        return -1;
+    next = skipBlankCharactors(src, start = next);
+    if (badEof(src, next))
+        return -1;
+    UINT fulfilled = 0;
+    enum
+    {
+        PointSectionFulfilled = 0x01,
+        FaceSectionFulfilled = 0x02,
+        LocalSectionFulfilled = 0x04,
+        NecessarySectionsFulfilled = PointSectionFulfilled | FaceSectionFulfilled,
+    };
+    while (src.at(next) != _t('}'))
+    {
+        NihilString prename;
+        next = prereadSectionName(src, prename, start = next);
+        if (badEof(src, next))
+            return -1;
+        // format start with: .Points {
+        if (prename == _t(".Points"))
+        {
+            next = loadPointSectionFromTextStream(src, start = next);
+            if (badEof(src, next))
+                return -1;
+            fulfilled |= PointSectionFulfilled;
+        }
+        // format start with: .Faces {
+        else if (prename == _t(".Faces"))
+        {
+            next = loadFaceSectionFromTextStream(src, start = next);
+            if (badEof(src, next))
+                return -1;
+            fulfilled |= FaceSectionFulfilled;
+        }
+        // format start with: .Local {
+        else if (prename == _t(".Local"))
+        {
+            next = loadLocalSectionFromTextStream(src, start = next);
+            if (badEof(src, next))
+                return -1;
+            fulfilled |= LocalSectionFulfilled;
+        }
+        else
+        {
+            ASSERT(!"Unexpected section.");
+            return -1;
+        }
+        next = skipBlankCharactors(src, start = next);
+        if (badEof(src, next))
+            return -1;
+    }
+    if ((fulfilled & NecessarySectionsFulfilled) != NecessarySectionsFulfilled)
+        return -1;
+    if (!(fulfilled & LocalSectionFulfilled))
+    {
+        // setup a default matrix
+        m_localMat.identity();
+    }
+    // so far so good, finally setup the buffers to geometry
+    if (!setupGeometryBuffers())
+        return -1;
+    ASSERT(src.at(next) == _t('}'));
+    return ++ next;
+}
+
+bool NihilPolygon::setupGeometryBuffers()
+{
+    ASSERT(m_geometry);
+    // create vertex buffer
+    int verticesCount = (int)m_pointList.size();
+    NihilVertex* pVertex = new NihilVertex[verticesCount];
+    for (int i = 0; i < verticesCount; i++)
+    {
+        pVertex[i].pos = m_pointList.at(i);
+        calculateNormal(pVertex[i].normal, i);
+    }
+    bool createVBDone = m_geometry->createVertexStream(pVertex, verticesCount);
+    delete[] pVertex;
+    if (!createVBDone)
+    {
+        ASSERT(!"Create vertex buffer failed.");
+        return false;
+    }
+    // create index buffer
+    if (!m_geometry->createIndexStream(&m_indexList.front(), (int)m_indexList.size()))
+    {
+        ASSERT(!"Create index buffer failed.");
+        return false;
+    }
+    // set local transformations
+    m_geometry->setLocalMat(m_localMat);
+    return true;
+}
+
+void NihilPolygon::calculateNormal(gs::vec3& normal, int i)
+{
+    auto f = m_pointLinkage.find(i);
+    if (f == m_pointLinkage.end())
+    {
+        ASSERT(!"Bad index.");
+        return;
+    }
+    auto& linkage = f->second.linkedIndices;
+    int linkageSize = (int)linkage.size();
+    if (linkageSize == 0)
+    {
+        normal = gs::vec3(0.f, 0.f, 0.f);
+        return;
+    }
+    else if (linkageSize == 1)
+    {
+        int j = linkage.front();
+        if (j > 0)
+            normal.sub(m_pointList.at(-j - 1), m_pointList.at(i));
+        else
+            normal.sub(m_pointList.at(i), m_pointList.at(j - 1));
+        normal.normalize();
+        return;
+    }
+    else if (linkageSize == 2)
+    {
+        int j = linkage.front();
+        int k = linkage.back();
+        ASSERT(j * k < 0);
+        if (j < 0)
+        {
+            ASSERT(k > 0);
+            k = k - 1;
+            j = -j - 1;
+            // k => i => j
+            normal.cross(gs::vec3().sub(m_pointList.at(i), m_pointList.at(k)), gs::vec3().sub(m_pointList.at(j), m_pointList.at(i)));
+        }
+        else
+        {
+            ASSERT(k < 0);
+            j = j - 1;
+            k = -k - 1;
+            // j => i => k
+            normal.cross(gs::vec3().sub(m_pointList.at(i), m_pointList.at(j)), gs::vec3().sub(m_pointList.at(k), m_pointList.at(i)));
+        }
+        normal.normalize();
+        return;
+    }
+    else
+    {
+        normal = gs::vec3(0.f, 0.f, 0.f);
+        for (int m = 0; m < linkageSize; m++)
+            normal += gs::vec3().sub(m_pointList.at(i), m_pointList.at(std::abs(linkage.at(m)) - 1)).normalize();
+        normal.normalize();
+    }
+}
+
+int NihilPolygon::loadPointSectionFromTextStream(const NihilString& src, int start)
+{
+    int next = enterSection(src, start);
+    if (badEof(src, next))
+        return -1;
+    next = skipBlankCharactors(src, start = next);
+    if (badEof(src, next))
+        return -1;
+    while (src.at(next) != _t('}'))
+    {
+        // the format was: float float float[optional](index)\r\n
+        NihilString line;
+        next = readLineOfSection(src, line, start = next);
+        if (badEof(src, next))
+            return -1;
+        float x, y, z;
+        int c = gs::strtool::sscanf(line.c_str(), _t("%f %f %f"), &x, &y, &z);
+        if (c != 3)
+        {
+            ASSERT(!"Bad format about line in section...");
+            return -1;
+        }
+        m_pointList.push_back(gs::vec3(x, y, z));
+        // step on
+        next = skipBlankCharactors(src, start = next);
+        if (badEof(src, next))
+            return -1;
+    }
+    ASSERT(src.at(next) == _t('}'));
+    return ++ next;
+}
+
+static void ensureUniquePointLinkage(NihilPointLinkage& pointLinkages, int i, int j)
+{
+    // i => j
+    auto& linkage1 = pointLinkages[i];
+    auto& linkage2 = pointLinkages[j];
+    auto f1 = std::find(linkage1.linkedIndices.begin(), linkage1.linkedIndices.end(), -(j + 1));
+    if (f1 == linkage1.linkedIndices.end())
+        linkage1.linkedIndices.push_back(-(j + 1));
+    auto f2 = std::find(linkage2.linkedIndices.begin(), linkage2.linkedIndices.end(), i + 1);
+    if (f2 == linkage2.linkedIndices.end())
+        linkage2.linkedIndices.push_back(i + 1);
+}
+
+int NihilPolygon::loadFaceSectionFromTextStream(const NihilString& src, int start)
+{
+    int next = enterSection(src, start);
+    if (badEof(src, next))
+        return -1;
+    next = skipBlankCharactors(src, start = next);
+    if (badEof(src, next))
+        return -1;
+    while (src.at(next) != _t('}'))
+    {
+        // the format was: index1 index2 index3[optional](index)\r\n
+        NihilString line;
+        next = readLineOfSection(src, line, start = next);
+        if (badEof(src, next))
+            return -1;
+        int i, j, k;
+        int c = gs::strtool::sscanf(line.c_str(), _t("%d %d %d"), &i, &j, &k);
+        if (c != 3)
+        {
+            ASSERT(!"Bad format about line in section...");
+            return -1;
+        }
+        // write index
+        m_indexList.push_back(i);
+        m_indexList.push_back(j);
+        m_indexList.push_back(k);
+        // setup point linkage info
+        ensureUniquePointLinkage(m_pointLinkage, i, j);
+        ensureUniquePointLinkage(m_pointLinkage, j, k);
+        ensureUniquePointLinkage(m_pointLinkage, k, i);
+        // step on
+        next = skipBlankCharactors(src, start = next);
+        if (badEof(src, next))
+            return -1;
+    }
+    ASSERT(src.at(next) == _t('}'));
+    return ++next;
+}
+
+int NihilPolygon::loadLocalSectionFromTextStream(const NihilString& src, int start)
+{
+    return 666;
 }
