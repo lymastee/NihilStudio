@@ -124,14 +124,14 @@ MStatus NihilIO::doIt( const MArgList& args )
 		MDagPath dagPath;
 		sel.getDagPath(i, dagPath);
 		MObject node = dagPath.node();
-		if (node.hasFn(MFn::kShape))
+		if (node.hasFn(MFn::kNurbsSurface))
+		{
+		}
+		else
 		{
 			MString output;
 			if (NihilPolygonIO::exporta(output, dagPath))
 				str += output;
-		}
-		if (node.hasFn(MFn::kNurbsSurface))
-		{
 		}
 	}
 

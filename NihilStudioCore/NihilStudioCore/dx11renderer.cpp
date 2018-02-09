@@ -107,7 +107,7 @@ void NihilDx11Geometry::setupIndexVertexBuffers(NihilDx11Renderer* renderer)
     UINT stride = sizeof(NihilVertex);
     UINT offset = 0;
     immContext->IASetVertexBuffers(0, 1, &m_vb, &stride, &offset);
-    immContext->IASetIndexBuffer(m_ib, DXGI_FORMAT_R32_SINT, 0);
+    immContext->IASetIndexBuffer(m_ib, DXGI_FORMAT_R32_UINT, 0);
     immContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
@@ -407,6 +407,40 @@ void NihilDx11Renderer::removeUIObject(NihilUIObject* ptr)
     ASSERT(ptr);
     m_uiSet.erase(ptr);
     delete ptr;
+}
+
+void NihilDx11Renderer::showSolidMode()
+{
+    ASSERT(m_device && m_immediateContext);
+    D3D11_RASTERIZER_DESC rd;
+    ZeroMemory(&rd, sizeof(rd));
+    rd.CullMode = D3D11_CULL_BACK;
+    rd.FillMode = D3D11_FILL_SOLID;
+    rd.FrontCounterClockwise = FALSE;
+    rd.DepthClipEnable = TRUE;
+    rd.MultisampleEnable = TRUE;
+    rd.AntialiasedLineEnable = TRUE;
+    ID3D11RasterizerState* pRasterState = nullptr;
+    m_device->CreateRasterizerState(&rd, &pRasterState);
+    m_immediateContext->RSSetState(pRasterState);
+    pRasterState->Release();
+}
+
+void NihilDx11Renderer::showWireframeMode()
+{
+    ASSERT(m_device && m_immediateContext);
+    D3D11_RASTERIZER_DESC rd;
+    ZeroMemory(&rd, sizeof(rd));
+    rd.CullMode = D3D11_CULL_NONE;
+    rd.FillMode = D3D11_FILL_WIREFRAME;
+    rd.FrontCounterClockwise = FALSE;
+    rd.DepthClipEnable = TRUE;
+    rd.MultisampleEnable = TRUE;
+    rd.AntialiasedLineEnable = TRUE;
+    ID3D11RasterizerState* pRasterState = nullptr;
+    m_device->CreateRasterizerState(&rd, &pRasterState);
+    m_immediateContext->RSSetState(pRasterState);
+    pRasterState->Release();
 }
 
 void NihilDx11Renderer::destroy()

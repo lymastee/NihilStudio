@@ -71,3 +71,23 @@ void MainWindow::getClientRect(QRect &rc) const
     rc.setWidth(rcMain.width() - NIHIL_CLIENT_PADDING * 2);
     rc.setHeight(rcMain.height() - rcMenu.height() - NIHIL_CLIENT_PADDING * 2);
 }
+
+void MainWindow::on_actionShow_Entities_triggered(bool)
+{
+    m_core.showSolidMode();
+}
+
+void MainWindow::on_actionShow_Wireframe_triggered(bool)
+{
+    m_core.showWireframeMode();
+}
+
+void MainWindow::on_actionRotate_Scene_triggered()
+{
+    m_core.rotateScene();
+}
+
+void MainWindow::on_actionScale_Scene_triggered()
+{
+    m_core.scaleScene();
+}

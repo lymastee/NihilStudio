@@ -21,6 +21,14 @@ private slots:
     void onIdle();
     void on_actionOpen_triggered(bool checked);
 
+    void on_actionShow_Entities_triggered(bool checked);
+
+    void on_actionShow_Wireframe_triggered(bool checked);
+
+    void on_actionRotate_Scene_triggered();
+
+    void on_actionScale_Scene_triggered();
+
 private:
     Ui::MainWindow *ui;
 

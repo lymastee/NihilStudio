@@ -84,6 +84,8 @@ public:
     virtual NihilUIObject* addUIObject() override;
     virtual void removeGeometry(NihilGeometry* ptr) override;
     virtual void removeUIObject(NihilUIObject* ptr) override;
+    virtual void showSolidMode() override;
+    virtual void showWireframeMode() override;
 
 public:
     ID3D11Device* getDevice() const { return m_device; }

@@ -18,6 +18,7 @@ struct NihilUIVertex
 };
 
 typedef gs::string NihilString;
+class NihilCore;
 
 class __declspec(novtable) NihilGeometry abstract
 {
@@ -51,6 +52,15 @@ public:
     virtual NihilUIObject* addUIObject() = 0;
     virtual void removeGeometry(NihilGeometry*) = 0;
     virtual void removeUIObject(NihilUIObject*) = 0;
+    virtual void showSolidMode() = 0;
+    virtual void showWireframeMode() = 0;
+};
+
+class __declspec(novtable) NihilControl abstract
+{
+public:
+    virtual ~NihilControl() {}
+    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) = 0; // true: stop false: continue
 };
 
 // todo: add Edge - Face structures later
@@ -71,9 +81,11 @@ public:
     gs::matrix              m_proj;
 
 public:
-    void setup();
+    void setup(HWND hwnd);
     void updateViewMatrix();
-    void calcMatrix();
+    void calcMatrix(gs::matrix& mat);
+    void updateRotation(const gs::vec2& lastpt, const gs::vec2& pt);
+    void updateScaling(float d);
 };
 
 class NihilPolygon
@@ -101,6 +113,27 @@ protected:
 
 typedef std::vector<NihilPolygon*> NihilPolygonList;
 
+// controllers
+class NihilControl_RotateScene:
+    public NihilControl
+{
+public:
+    NihilControl_RotateScene();
+    virtual ~NihilControl_RotateScene();
+    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
+
+private:
+    bool                    m_pressed = false;
+    gs::vec2                m_lastpt;
+};
+
+class NihilControl_ScaleScene:
+    public NihilControl
+{
+public:
+    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
+};
+
 class NihilCore
 {
     typedef std::unordered_map<HWND, NihilCore*> NihilHwndCoreMap;
@@ -114,7 +147,14 @@ public:
     void resizeWindow();
     void destroy();
     void render();
+    void showSolidMode();
+    void showWireframeMode();
+    void destroyController();
+    void rotateScene();
+    void scaleScene();
     NihilRenderer* getRenderer() const { return m_renderer; }
+    NihilControl* getController() const { return m_controller; }
+    NihilSceneConfig& getSceneConfig() { return m_sceneConfig; }
     HWND getHwnd() const { return m_hwnd; }
     WNDPROC getOldWndProc() const { return m_oldWndProc; }
     bool loadFromTextStream(const NihilString& src);
@@ -127,7 +167,9 @@ protected:
     HWND                    m_hwnd = 0;             // valid if non-zero
     WNDPROC                 m_oldWndProc = nullptr; // old windowproc
     NihilRenderer*          m_renderer = nullptr;
+    NihilSceneConfig        m_sceneConfig;
     NihilPolygonList        m_polygonList;
+    NihilControl*           m_controller = nullptr;
 
 protected:
     void destroyObjects();

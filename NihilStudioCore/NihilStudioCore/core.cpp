@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <windowsx.h>
 #include "core.h"
 #include "dx11renderer.h"
 
@@ -20,6 +21,7 @@ void NihilCore::setup(HWND hwnd)
     ASSERT(!m_hwnd && "DONOT setup twice.");
     if (!setupWindow(hwnd) || !setupRenderer())
         destroy();
+    m_sceneConfig.setup(m_hwnd);
 }
 
 void NihilCore::resizeWindow()
@@ -33,6 +35,7 @@ void NihilCore::resizeWindow()
 
 void NihilCore::destroy()
 {
+    destroyController();
     destroyObjects();
     if (m_hwnd)
     {
@@ -51,7 +54,45 @@ void NihilCore::destroy()
 void NihilCore::render()
 {
     if (m_renderer)
+    {
+        gs::matrix mat;
+        m_sceneConfig.calcMatrix(mat);
+        m_renderer->setWorldMat(mat);
         m_renderer->render();
+    }
+}
+
+void NihilCore::showSolidMode()
+{
+    if (m_renderer)
+        m_renderer->showSolidMode();
+}
+
+void NihilCore::showWireframeMode()
+{
+    if (m_renderer)
+        m_renderer->showWireframeMode();
+}
+
+void NihilCore::destroyController()
+{
+    if (m_controller)
+    {
+        delete m_controller;
+        m_controller = nullptr;
+    }
+}
+
+void NihilCore::rotateScene()
+{
+    destroyController();
+    m_controller = new NihilControl_RotateScene;
+}
+
+void NihilCore::scaleScene()
+{
+    destroyController();
+    m_controller = new NihilControl_ScaleScene;
 }
 
 #define NIHIL_BLANKS _t(" \t\v\r\n\f")
@@ -192,6 +233,14 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     WNDPROC oldWndProc = core->getOldWndProc();
     if (!oldWndProc)
         oldWndProc = DefWindowProc;
+
+    NihilControl* ctl = core->getController();
+    if (ctl)
+    {
+        if (ctl->onMsg(core, msg, wParam, lParam))
+            return S_OK;
+    }
+
     switch (msg)
     {
     case WM_QUIT:
@@ -208,9 +257,72 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return oldWndProc(hwnd, msg, wParam, lParam);
 }
 
-void NihilSceneConfig::setup()
+void NihilSceneConfig::setup(HWND hwnd)
 {
+    m_model.identity();
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    UINT width = rc.right - rc.left;
+    UINT height = rc.bottom - rc.top;
+    m_proj.perspectivefovlh(1.570796327f, (float)width / height, 0.01f, 100.f);
+    updateViewMatrix();
+}
 
+void NihilSceneConfig::updateViewMatrix()
+{
+    using namespace gs;
+    vec3 eye, at, up;
+    at = vec3(0.f, 0.f, 0.f);
+    vec4 rotaxis;
+    vec3(1.f, 0.f, 0.f).transform(rotaxis, matrix().rotation_y(m_rot1));
+    vec3 v;
+    v.cross((vec3&)rotaxis, vec3(0.f, 1.f, 0.f));
+    vec4 d;
+    v.transform(d, matrix().rotation((vec3&)rotaxis, m_rot2));
+    vec3 t(d.x, d.y, d.z);
+    t.normalize();
+    t.scale(m_cdis);
+    eye = t;
+    v.transform(d, matrix().rotation((vec3&)rotaxis, m_rot2 + PI / 2.f));
+    up = vec3(d.x, d.y, d.z);
+    up.normalize();
+    m_view.lookatlh(eye, at, up);
+}
+
+void NihilSceneConfig::calcMatrix(gs::matrix& mat)
+{
+    mat.multiply(m_model, m_view);
+    mat.multiply(m_proj);
+    //mat.transpose();
+}
+
+static void nihilKeepRotInDomain(float& r)
+{
+    if (r >= PI * 2.f)
+        r -= PI * 2.f;
+    if (r < 0.f)
+        r += PI * 2.f;
+}
+
+void NihilSceneConfig::updateRotation(const gs::vec2& lastpt, const gs::vec2& pt)
+{
+    gs::vec2 d;
+    d.sub(pt, lastpt);
+    float rot1 = m_rot1;
+    float rot2 = m_rot2;
+    rot1 += d.x * 0.01f;
+    rot2 += d.y * 0.01f;
+    nihilKeepRotInDomain(rot1);
+    nihilKeepRotInDomain(rot2);
+    m_rot1 = rot1;
+    m_rot2 = rot2;
+    updateViewMatrix();
+}
+
+void NihilSceneConfig::updateScaling(float d)
+{
+    m_cdis += (d * 0.1f);
+    updateViewMatrix();
 }
 
 NihilPolygon::NihilPolygon(NihilRenderer* renderer)
@@ -472,4 +584,68 @@ int NihilPolygon::loadFaceSectionFromTextStream(const NihilString& src, int star
 int NihilPolygon::loadLocalSectionFromTextStream(const NihilString& src, int start)
 {
     return 666;
+}
+
+NihilControl_RotateScene::NihilControl_RotateScene()
+{
+}
+
+NihilControl_RotateScene::~NihilControl_RotateScene()
+{
+    if (m_pressed)
+    {
+        m_pressed = false;
+        ReleaseCapture();
+    }
+}
+
+bool NihilControl_RotateScene::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    ASSERT(core);
+    switch (message)
+    {
+    case WM_LBUTTONDOWN:
+        SetCapture(core->getHwnd());
+        m_pressed = true;
+        m_lastpt.x = (float)GET_X_LPARAM(lParam);
+        m_lastpt.y = (float)GET_Y_LPARAM(lParam);
+        break;
+    case WM_LBUTTONUP:
+    {
+        ReleaseCapture();
+        m_pressed = false;
+        gs::vec2 pt;
+        pt.x = (float)GET_X_LPARAM(lParam);
+        pt.y = (float)GET_Y_LPARAM(lParam);
+        core->getSceneConfig().updateRotation(m_lastpt, pt);
+        m_lastpt = pt;
+        break;
+    }
+    case WM_MOUSEMOVE:
+        if (m_pressed)
+        {
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            core->getSceneConfig().updateRotation(m_lastpt, pt);
+            m_lastpt = pt;
+        }
+        break;
+    }
+    return false;
+}
+
+bool NihilControl_ScaleScene::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    ASSERT(core);
+    switch (message)
+    {
+    case WM_MOUSEWHEEL:
+    {
+        float d = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+        core->getSceneConfig().updateScaling(d);
+        break;
+    }
+    }
+    return false;
 }

@@ -50,9 +50,6 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionNew"/>
-    <addaction name="actionImport"/>
-    <addaction name="separator"/>
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
     <addaction name="separator"/>
@@ -104,22 +101,6 @@
   <action name="actionSave">
    <property name="text">
     <string>Save</string>
-   </property>
-  </action>
-  <action name="actionNew">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="text">
-    <string>New</string>
-   </property>
-  </action>
-  <action name="actionImport">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="text">
-    <string>Import</string>
    </property>
   </action>
   <action name="actionSelect_Points">
