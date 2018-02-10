@@ -76,8 +76,7 @@
     <addaction name="actionShow_Entities"/>
     <addaction name="actionShow_Wireframe"/>
     <addaction name="separator"/>
-    <addaction name="actionRotate_Scene"/>
-    <addaction name="actionScale_Scene"/>
+    <addaction name="actionNavigate_Scene"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -149,20 +148,12 @@
     <string>Show Wireframe</string>
    </property>
   </action>
-  <action name="actionRotate_Scene">
+  <action name="actionNavigate_Scene">
    <property name="text">
-    <string>Rotate Scene</string>
+    <string>Navigate Scene</string>
    </property>
    <property name="toolTip">
-    <string>Drag left mouse button to rotate scene</string>
-   </property>
-  </action>
-  <action name="actionScale_Scene">
-   <property name="text">
-    <string>Scale Scene</string>
-   </property>
-   <property name="toolTip">
-    <string>Use mouse wheel to scale scene</string>
+    <string>Rotate|zoom|translate the scene.</string>
    </property>
   </action>
  </widget>

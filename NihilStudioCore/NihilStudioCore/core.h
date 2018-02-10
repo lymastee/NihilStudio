@@ -63,30 +63,30 @@ public:
     virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) = 0; // true: stop false: continue
 };
 
-// todo: add Edge - Face structures later
-typedef std::vector<gs::vec3> NihilPointList;
-typedef std::vector<int> NihilIndexList;
-// if the (index + 1) was negative, then the linkage direction was inversed
-typedef struct { std::vector<int> linkedIndices; } NihilLinkedPoints;
-typedef std::unordered_map<int, NihilLinkedPoints> NihilPointLinkage;
-
 class NihilSceneConfig
 {
 public:
-    float                   m_rot1 = 0.f;           // first rotation angle, in x-z plane, rotate in y-axis
-    float                   m_rot2 = 0.f;           // second rotation angle, in rot1 plane
-    float                   m_cdis = 4.f;           // camera distance
-    gs::matrix              m_model;
-    gs::matrix              m_view;
-    gs::matrix              m_proj;
-
-public:
     void setup(HWND hwnd);
+    void updateProjMatrix(HWND hwnd);
     void updateViewMatrix();
     void calcMatrix(gs::matrix& mat);
     void updateRotation(const gs::vec2& lastpt, const gs::vec2& pt);
-    void updateScaling(float d);
+    void updateZooming(float d);
+    void updateTranslation(const gs::vec2& lastpt, const gs::vec2& pt);
+
+private:
+    float                   m_rot1 = 0.f;           // first rotation angle, in x-z plane, rotate in y-axis
+    float                   m_rot2 = 0.f;           // second rotation angle, in rot1 plane
+    float                   m_cdis = 4.f;           // camera distance
+    gs::vec2                m_offset;               // offset after rotation
+    gs::matrix              m_model;
+    gs::matrix              m_view;
+    gs::matrix              m_proj;
 };
+
+// todo: add Edge - Face structures later
+typedef std::vector<NihilVertex> NihilPointList;
+typedef std::vector<int> NihilIndexList;
 
 class NihilPolygon
 {
@@ -100,12 +100,11 @@ protected:
     NihilGeometry*          m_geometry = nullptr;
     NihilPointList          m_pointList;
     NihilIndexList          m_indexList;
-    NihilPointLinkage       m_pointLinkage;     // used for calculate the points normal
     gs::matrix              m_localMat;
 
 protected:
+    void calculateNormals();
     bool setupGeometryBuffers();
-    void calculateNormal(gs::vec3& normal, int i);
     int loadPointSectionFromTextStream(const NihilString& src, int start);
     int loadFaceSectionFromTextStream(const NihilString& src, int start);
     int loadLocalSectionFromTextStream(const NihilString& src, int start);
@@ -114,30 +113,22 @@ protected:
 typedef std::vector<NihilPolygon*> NihilPolygonList;
 
 // controllers
-class NihilControl_RotateScene:
+class NihilControl_NavigateScene:
     public NihilControl
 {
 public:
-    NihilControl_RotateScene();
-    virtual ~NihilControl_RotateScene();
+    NihilControl_NavigateScene();
+    virtual ~NihilControl_NavigateScene();
     virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
 
 private:
-    bool                    m_pressed = false;
+    bool                    m_lmbPressed = false;
+    bool                    m_rmbPressed = false;
     gs::vec2                m_lastpt;
-};
-
-class NihilControl_ScaleScene:
-    public NihilControl
-{
-public:
-    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
 };
 
 class NihilCore
 {
-    typedef std::unordered_map<HWND, NihilCore*> NihilHwndCoreMap;
-
 public:
     NihilCore();
     virtual ~NihilCore();
@@ -150,8 +141,7 @@ public:
     void showSolidMode();
     void showWireframeMode();
     void destroyController();
-    void rotateScene();
-    void scaleScene();
+    void navigateScene();
     NihilRenderer* getRenderer() const { return m_renderer; }
     NihilControl* getController() const { return m_controller; }
     NihilSceneConfig& getSceneConfig() { return m_sceneConfig; }
@@ -161,7 +151,6 @@ public:
 
 private:
     static LRESULT CALLBACK wndProc(HWND, UINT, WPARAM, LPARAM);
-    static NihilHwndCoreMap m_instMap;
 
 protected:
     HWND                    m_hwnd = 0;             // valid if non-zero

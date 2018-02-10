@@ -25,9 +25,9 @@ private slots:
 
     void on_actionShow_Wireframe_triggered(bool checked);
 
-    void on_actionRotate_Scene_triggered();
+    void on_actionNavigate_Scene_triggered();
 
-    void on_actionScale_Scene_triggered();
+    void on_actionClose_triggered();
 
 private:
     Ui::MainWindow *ui;

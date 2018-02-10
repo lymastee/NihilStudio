@@ -23,6 +23,9 @@
     <ClCompile Include="gslib\pink\utility.cpp" />
     <ClCompile Include="NihilIOCmd.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="gslib\gslib\file.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{F14F1EAE-F9BA-4AF9-ABBC-D1ADC5B88520}</ProjectGuid>
@@ -101,10 +104,10 @@
       <StringPooling>true</StringPooling>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <ExceptionHandling>Async</ExceptionHandling>
-      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck>true</BufferSecurityCheck>
       <AdditionalOptions>/EHc %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>.;F:\Autodesk\Maya2013\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;F:\Autodesk\Maya2013\include;./gslib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderOutputFile>$(Configuration)\NihilIO.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
     <Link>

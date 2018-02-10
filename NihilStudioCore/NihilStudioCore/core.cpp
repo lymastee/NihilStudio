@@ -5,8 +5,6 @@
 
 #define ASSERT assert
 
-NihilCore::NihilHwndCoreMap NihilCore::m_instMap;
-
 NihilCore::NihilCore()
 {
 }
@@ -22,12 +20,17 @@ void NihilCore::setup(HWND hwnd)
     if (!setupWindow(hwnd) || !setupRenderer())
         destroy();
     m_sceneConfig.setup(m_hwnd);
+    navigateScene();
 }
 
 void NihilCore::resizeWindow()
 {
+    m_sceneConfig.updateProjMatrix(m_hwnd);
     if (m_renderer)
     {
+        gs::matrix mat;
+        m_sceneConfig.calcMatrix(mat);
+        m_renderer->setWorldMat(mat);
         m_renderer->notifyResize();
         m_renderer->render();
     }
@@ -39,7 +42,7 @@ void NihilCore::destroy()
     destroyObjects();
     if (m_hwnd)
     {
-        m_instMap.erase(m_hwnd);
+        SetWindowLong(m_hwnd, GWL_USERDATA, 0);
         SetWindowLong(m_hwnd, GWL_WNDPROC, (LONG)m_oldWndProc);
         m_hwnd = 0;
         m_oldWndProc = nullptr;
@@ -83,16 +86,10 @@ void NihilCore::destroyController()
     }
 }
 
-void NihilCore::rotateScene()
+void NihilCore::navigateScene()
 {
     destroyController();
-    m_controller = new NihilControl_RotateScene;
-}
-
-void NihilCore::scaleScene()
-{
-    destroyController();
-    m_controller = new NihilControl_ScaleScene;
+    m_controller = new NihilControl_NavigateScene;
 }
 
 #define NIHIL_BLANKS _t(" \t\v\r\n\f")
@@ -180,6 +177,9 @@ bool NihilCore::loadFromTextStream(const NihilString& src)
             ASSERT(!"Unknown section name.");
             return false;
         }
+        next = skipBlankCharactors(src, start = next);
+        if (next >= src.length())
+            break;
         next = prereadSectionName(src, prename, start = next);
     } while (next < src.length());
     return true;
@@ -195,9 +195,11 @@ void NihilCore::destroyObjects()
 bool NihilCore::setupWindow(HWND hwnd)
 {
     m_hwnd = hwnd;
+    LONG userData = GetWindowLong(hwnd, GWL_USERDATA);
+    ASSERT(!userData);
+    SetWindowLong(hwnd, GWL_USERDATA, (LONG)this);
     WNDPROC wndproc = (WNDPROC)GetWindowLong(hwnd, GWL_WNDPROC);
     m_oldWndProc = wndproc;
-    m_instMap.insert(std::make_pair(hwnd, this));
     SetWindowLong(hwnd, GWL_WNDPROC, (LONG)wndProc);
     return true;
 }
@@ -225,10 +227,9 @@ int NihilCore::loadPolygonFromTextStream(const NihilString& src, int start)
 
 LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    auto f = m_instMap.find(hwnd);
-    if (f == m_instMap.end())
+    NihilCore* core = (NihilCore*)GetWindowLong(hwnd, GWL_USERDATA);
+    if (!core)
         return DefWindowProc(hwnd, msg, wParam, lParam);
-    NihilCore* core = f->second;
     ASSERT(core);
     WNDPROC oldWndProc = core->getOldWndProc();
     if (!oldWndProc)
@@ -260,12 +261,20 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 void NihilSceneConfig::setup(HWND hwnd)
 {
     m_model.identity();
+    m_offset = gs::vec2(0.f, 0.f);
+    updateProjMatrix(hwnd);
+    updateViewMatrix();
+}
+
+void NihilSceneConfig::updateProjMatrix(HWND hwnd)
+{
     RECT rc;
     GetClientRect(hwnd, &rc);
     UINT width = rc.right - rc.left;
     UINT height = rc.bottom - rc.top;
-    m_proj.perspectivefovlh(1.570796327f, (float)width / height, 0.01f, 100.f);
-    updateViewMatrix();
+    // const float fovy = 1.570796327f;
+    const float fovy = 1.f;
+    m_proj.perspectivefovlh(fovy, (float)width / height, 0.01f, 100.f);
 }
 
 void NihilSceneConfig::updateViewMatrix()
@@ -287,13 +296,16 @@ void NihilSceneConfig::updateViewMatrix()
     up = vec3(d.x, d.y, d.z);
     up.normalize();
     m_view.lookatlh(eye, at, up);
+    // add bias
+    matrix offset;
+    offset.translation(m_offset.x, m_offset.y, 0.f);
+    m_view.multiply(offset);
 }
 
 void NihilSceneConfig::calcMatrix(gs::matrix& mat)
 {
     mat.multiply(m_model, m_view);
     mat.multiply(m_proj);
-    //mat.transpose();
 }
 
 static void nihilKeepRotInDomain(float& r)
@@ -310,8 +322,8 @@ void NihilSceneConfig::updateRotation(const gs::vec2& lastpt, const gs::vec2& pt
     d.sub(pt, lastpt);
     float rot1 = m_rot1;
     float rot2 = m_rot2;
-    rot1 += d.x * 0.01f;
-    rot2 += d.y * 0.01f;
+    rot1 += d.x * 0.005f;
+    rot2 += d.y * 0.005f;
     nihilKeepRotInDomain(rot1);
     nihilKeepRotInDomain(rot2);
     m_rot1 = rot1;
@@ -319,9 +331,19 @@ void NihilSceneConfig::updateRotation(const gs::vec2& lastpt, const gs::vec2& pt
     updateViewMatrix();
 }
 
-void NihilSceneConfig::updateScaling(float d)
+void NihilSceneConfig::updateZooming(float d)
 {
     m_cdis += (d * 0.1f);
+    updateViewMatrix();
+}
+
+void NihilSceneConfig::updateTranslation(const gs::vec2& lastpt, const gs::vec2& pt)
+{
+    gs::vec2 d;
+    d.sub(pt, lastpt);
+    d.scale(0.05f);
+    d.y = -d.y;
+    m_offset.add(m_offset, d);
     updateViewMatrix();
 }
 
@@ -398,6 +420,7 @@ int NihilPolygon::loadPolygonFromTextStream(const NihilString& src, int start)
     }
     if ((fulfilled & NecessarySectionsFulfilled) != NecessarySectionsFulfilled)
         return -1;
+    calculateNormals();
     if (!(fulfilled & LocalSectionFulfilled))
     {
         // setup a default matrix
@@ -410,20 +433,37 @@ int NihilPolygon::loadPolygonFromTextStream(const NihilString& src, int start)
     return ++ next;
 }
 
+void NihilPolygon::calculateNormals()
+{
+    // 1.set all the normals to 0
+    for (NihilVertex& v : m_pointList)
+        v.normal = gs::vec3(0.f, 0.f, 0.f);
+    // 2.calculate normals for each face, normalize it, add it up to the normals of each point
+    ASSERT(m_indexList.size() % 3 == 0);
+    for (int m = 0; m < (int)m_indexList.size(); m += 3)
+    {
+        int i = m_indexList.at(m);
+        int j = m_indexList.at(m + 1);
+        int k = m_indexList.at(m + 2);
+        NihilVertex& v1 = m_pointList.at(i);
+        NihilVertex& v2 = m_pointList.at(j);
+        NihilVertex& v3 = m_pointList.at(k);
+        gs::vec3 normal;
+        normal.cross(gs::vec3().sub(v2.pos, v1.pos), gs::vec3().sub(v3.pos, v2.pos)).normalize();
+        v1.normal += normal;
+        v2.normal += normal;
+        v3.normal += normal;
+    }
+    // 3.normalize each of the normals
+    for (NihilVertex& v : m_pointList)
+        v.normal.normalize();
+}
+
 bool NihilPolygon::setupGeometryBuffers()
 {
     ASSERT(m_geometry);
     // create vertex buffer
-    int verticesCount = (int)m_pointList.size();
-    NihilVertex* pVertex = new NihilVertex[verticesCount];
-    for (int i = 0; i < verticesCount; i++)
-    {
-        pVertex[i].pos = m_pointList.at(i);
-        calculateNormal(pVertex[i].normal, i);
-    }
-    bool createVBDone = m_geometry->createVertexStream(pVertex, verticesCount);
-    delete[] pVertex;
-    if (!createVBDone)
+    if (!m_geometry->createVertexStream(&m_pointList.front(), (int)m_pointList.size()))
     {
         ASSERT(!"Create vertex buffer failed.");
         return false;
@@ -437,64 +477,6 @@ bool NihilPolygon::setupGeometryBuffers()
     // set local transformations
     m_geometry->setLocalMat(m_localMat);
     return true;
-}
-
-void NihilPolygon::calculateNormal(gs::vec3& normal, int i)
-{
-    auto f = m_pointLinkage.find(i);
-    if (f == m_pointLinkage.end())
-    {
-        ASSERT(!"Bad index.");
-        return;
-    }
-    auto& linkage = f->second.linkedIndices;
-    int linkageSize = (int)linkage.size();
-    if (linkageSize == 0)
-    {
-        normal = gs::vec3(0.f, 0.f, 0.f);
-        return;
-    }
-    else if (linkageSize == 1)
-    {
-        int j = linkage.front();
-        if (j > 0)
-            normal.sub(m_pointList.at(-j - 1), m_pointList.at(i));
-        else
-            normal.sub(m_pointList.at(i), m_pointList.at(j - 1));
-        normal.normalize();
-        return;
-    }
-    else if (linkageSize == 2)
-    {
-        int j = linkage.front();
-        int k = linkage.back();
-        ASSERT(j * k < 0);
-        if (j < 0)
-        {
-            ASSERT(k > 0);
-            k = k - 1;
-            j = -j - 1;
-            // k => i => j
-            normal.cross(gs::vec3().sub(m_pointList.at(i), m_pointList.at(k)), gs::vec3().sub(m_pointList.at(j), m_pointList.at(i)));
-        }
-        else
-        {
-            ASSERT(k < 0);
-            j = j - 1;
-            k = -k - 1;
-            // j => i => k
-            normal.cross(gs::vec3().sub(m_pointList.at(i), m_pointList.at(j)), gs::vec3().sub(m_pointList.at(k), m_pointList.at(i)));
-        }
-        normal.normalize();
-        return;
-    }
-    else
-    {
-        normal = gs::vec3(0.f, 0.f, 0.f);
-        for (int m = 0; m < linkageSize; m++)
-            normal += gs::vec3().sub(m_pointList.at(i), m_pointList.at(std::abs(linkage.at(m)) - 1)).normalize();
-        normal.normalize();
-    }
 }
 
 int NihilPolygon::loadPointSectionFromTextStream(const NihilString& src, int start)
@@ -519,7 +501,10 @@ int NihilPolygon::loadPointSectionFromTextStream(const NihilString& src, int sta
             ASSERT(!"Bad format about line in section...");
             return -1;
         }
-        m_pointList.push_back(gs::vec3(x, y, z));
+        NihilVertex v;
+        v.pos = gs::vec3(x, y, z);
+        v.normal = gs::vec3(0.f, 0.f, 0.f);
+        m_pointList.push_back(v);
         // step on
         next = skipBlankCharactors(src, start = next);
         if (badEof(src, next))
@@ -527,19 +512,6 @@ int NihilPolygon::loadPointSectionFromTextStream(const NihilString& src, int sta
     }
     ASSERT(src.at(next) == _t('}'));
     return ++ next;
-}
-
-static void ensureUniquePointLinkage(NihilPointLinkage& pointLinkages, int i, int j)
-{
-    // i => j
-    auto& linkage1 = pointLinkages[i];
-    auto& linkage2 = pointLinkages[j];
-    auto f1 = std::find(linkage1.linkedIndices.begin(), linkage1.linkedIndices.end(), -(j + 1));
-    if (f1 == linkage1.linkedIndices.end())
-        linkage1.linkedIndices.push_back(-(j + 1));
-    auto f2 = std::find(linkage2.linkedIndices.begin(), linkage2.linkedIndices.end(), i + 1);
-    if (f2 == linkage2.linkedIndices.end())
-        linkage2.linkedIndices.push_back(i + 1);
 }
 
 int NihilPolygon::loadFaceSectionFromTextStream(const NihilString& src, int start)
@@ -568,10 +540,6 @@ int NihilPolygon::loadFaceSectionFromTextStream(const NihilString& src, int star
         m_indexList.push_back(i);
         m_indexList.push_back(j);
         m_indexList.push_back(k);
-        // setup point linkage info
-        ensureUniquePointLinkage(m_pointLinkage, i, j);
-        ensureUniquePointLinkage(m_pointLinkage, j, k);
-        ensureUniquePointLinkage(m_pointLinkage, k, i);
         // step on
         next = skipBlankCharactors(src, start = next);
         if (badEof(src, next))
@@ -586,44 +554,36 @@ int NihilPolygon::loadLocalSectionFromTextStream(const NihilString& src, int sta
     return 666;
 }
 
-NihilControl_RotateScene::NihilControl_RotateScene()
+NihilControl_NavigateScene::NihilControl_NavigateScene()
 {
 }
 
-NihilControl_RotateScene::~NihilControl_RotateScene()
+NihilControl_NavigateScene::~NihilControl_NavigateScene()
 {
-    if (m_pressed)
+    if (m_lmbPressed || m_rmbPressed)
     {
-        m_pressed = false;
+        m_lmbPressed = false;
+        m_rmbPressed = false;
         ReleaseCapture();
     }
 }
 
-bool NihilControl_RotateScene::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
+bool NihilControl_NavigateScene::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
 {
     ASSERT(core);
     switch (message)
     {
     case WM_LBUTTONDOWN:
         SetCapture(core->getHwnd());
-        m_pressed = true;
+        m_lmbPressed = true;
         m_lastpt.x = (float)GET_X_LPARAM(lParam);
         m_lastpt.y = (float)GET_Y_LPARAM(lParam);
         break;
     case WM_LBUTTONUP:
-    {
-        ReleaseCapture();
-        m_pressed = false;
-        gs::vec2 pt;
-        pt.x = (float)GET_X_LPARAM(lParam);
-        pt.y = (float)GET_Y_LPARAM(lParam);
-        core->getSceneConfig().updateRotation(m_lastpt, pt);
-        m_lastpt = pt;
-        break;
-    }
-    case WM_MOUSEMOVE:
-        if (m_pressed)
+        if (m_lmbPressed)
         {
+            ReleaseCapture();
+            m_lmbPressed = false;
             gs::vec2 pt;
             pt.x = (float)GET_X_LPARAM(lParam);
             pt.y = (float)GET_Y_LPARAM(lParam);
@@ -631,19 +591,46 @@ bool NihilControl_RotateScene::onMsg(NihilCore* core, UINT message, WPARAM wPara
             m_lastpt = pt;
         }
         break;
-    }
-    return false;
-}
-
-bool NihilControl_ScaleScene::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    ASSERT(core);
-    switch (message)
-    {
+    case WM_RBUTTONDOWN:
+        SetCapture(core->getHwnd());
+        m_rmbPressed = true;
+        m_lastpt.x = (float)GET_X_LPARAM(lParam);
+        m_lastpt.y = (float)GET_Y_LPARAM(lParam);
+        break;
+    case WM_RBUTTONUP:
+        if (m_rmbPressed)
+        {
+            ReleaseCapture();
+            m_rmbPressed = false;
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            core->getSceneConfig().updateTranslation(m_lastpt, pt);
+            m_lastpt = pt;
+        }
+        break;
+    case WM_MOUSEMOVE:
+        if (m_lmbPressed)
+        {
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            core->getSceneConfig().updateRotation(m_lastpt, pt);
+            m_lastpt = pt;
+        }
+        if (m_rmbPressed)
+        {
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            core->getSceneConfig().updateTranslation(m_lastpt, pt);
+            m_lastpt = pt;
+        }
+        break;
     case WM_MOUSEWHEEL:
     {
         float d = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
-        core->getSceneConfig().updateScaling(d);
+        core->getSceneConfig().updateZooming(d);
         break;
     }
     }

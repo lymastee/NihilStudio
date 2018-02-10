@@ -82,12 +82,12 @@ void MainWindow::on_actionShow_Wireframe_triggered(bool)
     m_core.showWireframeMode();
 }
 
-void MainWindow::on_actionRotate_Scene_triggered()
+void MainWindow::on_actionNavigate_Scene_triggered()
 {
-    m_core.rotateScene();
+    m_core.navigateScene();
 }
 
-void MainWindow::on_actionScale_Scene_triggered()
+void MainWindow::on_actionClose_triggered()
 {
-    m_core.scaleScene();
+    close();
 }

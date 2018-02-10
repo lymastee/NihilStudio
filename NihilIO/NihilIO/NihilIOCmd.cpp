@@ -17,9 +17,11 @@
 #include <maya/MDagPath.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFloatPointArray.h>
+#include <maya/MMatrix.h>
 
 #include <gslib/math.h>
 #include <gslib/string.h>
+#include <gslib/file.h>
 
 // Use helper macro to register a command with Maya.  It creates and
 // registers a command that does not support undo or redo.  The 
@@ -43,7 +45,7 @@ DeclareSimpleCommand( NihilIO, "NihilIO", "2013");
 class NihilPolygonIO
 {
 public:
-	static bool exporta(MString& output, MDagPath& dp)
+	static bool exporta(MDagPath& dp, gs::file& f)
 	{
 		MFnMesh mfnMesh(dp);
 		MIntArray triangles, triangleVertices;
@@ -56,34 +58,38 @@ public:
 		if (MFAIL(triangleVertices.get(indexData.get())))
 			return false;
 		MFloatPointArray points;
-		if (MFAIL(mfnMesh.getPoints(points, MSpace::kWorld)))
+		if (MFAIL(mfnMesh.getPoints(points, MSpace::kObject)))
 			return false;
 		unsigned int ptCount = points.length();
 		std::unique_ptr<gs::vec4[]> pointsData(new gs::vec4[ptCount]);
 		if (MFAIL(points.get((float (*)[4])pointsData.get())))
 			return false;
 		// output
-		output += "Polygon {\n";
+		f.write("Polygon {\n");
 		// export points
-		output += "\t.Points {\n";
+		f.write("\t.Points {\n");
 		for (unsigned int i = 0; i < ptCount; i ++)
 		{
 			gs::string strpt;
 			strpt.format(_t("\t\t%f %f %f(%d)\n"), pointsData[i].x / pointsData[i].w, pointsData[i].y / pointsData[i].w, pointsData[i].z / pointsData[i].w, i);
-			output += strpt.c_str();
+			f.write(strpt);
 		}
-		output += "\t}\n";
+		f.write("\t}\n");
 		// export faces
-		output += "\t.Faces {\n";
+		f.write("\t.Faces {\n");
 		assert(vertices % 3 == 0);
 		for (unsigned int i = 0; i < vertices; i += 3)
 		{
 			gs::string strFaces;
 			strFaces.format(_t("\t\t%d %d %d(%d)\n"), indexData[i], indexData[i + 1], indexData[i + 2], i / 3);
-			output += strFaces.c_str();
+			f.write(strFaces);
 		}
-		output += "\t}\n";
-		output += "}\n";
+		f.write("\t}\n");
+		// export transform
+		//f.write("\t.Local {\n");
+		MMatrix mat = mfnMesh.transformationMatrix();
+		//f.write("\t}\n");
+		f.write("}\n");
 		return true;
 	}
 };
@@ -115,8 +121,18 @@ MStatus NihilIO::doIt( const MArgList& args )
 		return MS::kFailure;
 	}
 
+	// Create file
+	char szDefaultPath[MAX_PATH];
+	GetCurrentDirectoryA(MAX_PATH, szDefaultPath);
+	strcat_s(szDefaultPath, MAX_PATH, "\\nihilIOSaves.txt");
+	const char* resultFileName = szDefaultPath;
+	if (args.length() >= 1)
+		resultFileName = args.asString(0).asChar();
+	gs::file f;
+	f.open_text(resultFileName, false);
+
 	// Output
-	MString str = "NihilIO command executed:\n";
+	appendToResult("NihilIO command executed:\n");
 
 	// For each selected
 	for (unsigned int i = 0; i < sel.length(); i ++)
@@ -129,16 +145,16 @@ MStatus NihilIO::doIt( const MArgList& args )
 		}
 		else
 		{
-			MString output;
-			if (NihilPolygonIO::exporta(output, dagPath))
-				str += output;
+			NihilPolygonIO::exporta(dagPath, f);
 		}
 	}
 
 	// Since this class is derived off of MPxCommand, you can use the 
 	// inherited methods to return values and set error messages
 	//
-	setResult(str);
+	gs::string s;
+	s.format(_t("successfully write to \"%s\".\n"), resultFileName);
+	appendToResult(s.c_str());
 
 	return stat;
 }
