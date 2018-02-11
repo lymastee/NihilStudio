@@ -69,6 +69,7 @@ public:
     struct ConstantBuffer
     {
         gs::matrix              mvp;
+        gs::vec3                diffuseColor;
     };
 
 public:

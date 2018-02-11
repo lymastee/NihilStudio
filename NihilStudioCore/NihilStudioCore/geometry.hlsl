@@ -1,6 +1,7 @@
 cbuffer ConstantBuffer : register(b0)
 {
     matrix mvp;
+    float3 diffuseColor;
 }
 
 struct VS_Input
@@ -17,7 +18,7 @@ struct PS_Input
 
 static const float3 lightPos = float3(10.f, 10.f, 10.f);
 static const float3 ambientColor = float3(0.1f, 0.f, 0.f);
-static const float3 diffuseColor = float3(0.5f, 0.f, 0.f);
+//static const float3 diffuseColor = float3(0.5f, 0.f, 0.f);
 static const float3 specColor = float3(1.f, 1.f, 1.f);
 static const float shininess = 22.f;
 

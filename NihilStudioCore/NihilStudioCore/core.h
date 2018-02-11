@@ -7,14 +7,14 @@
 
 struct NihilVertex
 {
-    gs::vec3            pos;
-    gs::vec3            normal;
+    gs::vec3                pos;
+    gs::vec3                normal;
 };
 
 struct NihilUIVertex
 {
-    gs::vec4            pos;
-    gs::vec4            color;
+    gs::vec4                pos;
+    gs::vec4                color;
 };
 
 typedef gs::string NihilString;
@@ -28,6 +28,11 @@ public:
     virtual bool createIndexStream(int indices[], int size) = 0;
     virtual bool updateVertexStream(NihilVertex vertices[], int size) = 0;
     virtual void setLocalMat(const gs::matrix& m) = 0;
+    void setSelected(bool b) { m_isSelected = b; }
+    bool isSelected() const { return m_isSelected; }
+
+protected:
+    bool                    m_isSelected = false;
 };
 
 class __declspec(novtable) NihilUIObject abstract
@@ -78,9 +83,9 @@ private:
     float                   m_rot1 = 0.f;           // first rotation angle, in x-z plane, rotate in y-axis
     float                   m_rot2 = 0.f;           // second rotation angle, in rot1 plane
     float                   m_cdis = 4.f;           // camera distance
-    gs::vec2                m_offset;               // offset after rotation
+    gs::vec3                m_viewOffset = gs::vec3(0.f, 0.f, 0.f);
     gs::matrix              m_model;
-    gs::matrix              m_view;
+    gs::matrix              m_viewLookat;
     gs::matrix              m_proj;
 };
 
@@ -94,6 +99,11 @@ public:
     NihilPolygon(NihilRenderer* renderer);
     ~NihilPolygon();
     int loadPolygonFromTextStream(const NihilString& src, int start);
+    void setSelected(bool b)
+    {
+        if (m_geometry)
+            m_geometry->setSelected(b);
+    }
 
 protected:
     NihilRenderer*          m_renderer = nullptr;

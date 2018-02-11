@@ -261,7 +261,6 @@ LRESULT NihilCore::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 void NihilSceneConfig::setup(HWND hwnd)
 {
     m_model.identity();
-    m_offset = gs::vec2(0.f, 0.f);
     updateProjMatrix(hwnd);
     updateViewMatrix();
 }
@@ -295,16 +294,15 @@ void NihilSceneConfig::updateViewMatrix()
     v.transform(d, matrix().rotation((vec3&)rotaxis, m_rot2 + PI / 2.f));
     up = vec3(d.x, d.y, d.z);
     up.normalize();
-    m_view.lookatlh(eye, at, up);
-    // add bias
-    matrix offset;
-    offset.translation(m_offset.x, m_offset.y, 0.f);
-    m_view.multiply(offset);
+    m_viewLookat.lookatlh(eye, at, up);
 }
 
 void NihilSceneConfig::calcMatrix(gs::matrix& mat)
 {
-    mat.multiply(m_model, m_view);
+    gs::matrix matOffset;
+    matOffset.translation(m_viewOffset.x, m_viewOffset.y, m_viewOffset.z);
+    mat.multiply(m_model, matOffset);
+    mat.multiply(m_viewLookat);
     mat.multiply(m_proj);
 }
 
@@ -339,11 +337,19 @@ void NihilSceneConfig::updateZooming(float d)
 
 void NihilSceneConfig::updateTranslation(const gs::vec2& lastpt, const gs::vec2& pt)
 {
+    gs::matrix mat;
+    float det;
+    mat.inverse(&det, m_viewLookat);
     gs::vec2 d;
     d.sub(pt, lastpt);
-    d.scale(0.05f);
-    d.y = -d.y;
-    m_offset.add(m_offset, d);
+    d.scale(0.01f);
+    gs::vec4 t, t0;
+    t.multiply(gs::vec4(d.x, -d.y, 0.f, 1.f), mat);
+    t0.multiply(gs::vec4(0.f, 0.f, 0.f, 1.f), mat);
+    t.scale(1.f / t.w);
+    t0.scale(1.f / t.w);
+    t.sub(t, t0);
+    m_viewOffset.add(m_viewOffset, gs::vec3(t.x, t.y, t.z));
     updateViewMatrix();
 }
 

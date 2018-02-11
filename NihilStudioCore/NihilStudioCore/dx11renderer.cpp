@@ -573,6 +573,10 @@ void NihilDx11Renderer::setupConstantBufferForGeometry(NihilDx11Geometry* geomet
     m_immediateContext->Map(m_geometryCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
     auto* data = (ConstantBuffer*)mappedRes.pData;
     data->mvp = m;
+    if (geometry->isSelected())
+        data->diffuseColor = gs::vec3(0.9f, 0.2f, 0.f);
+    else
+        data->diffuseColor = gs::vec3(0.6f, 0.f, 0.f);
     m_immediateContext->Unmap(m_geometryCB, 0);
     m_immediateContext->VSSetConstantBuffers(0, 1, &m_geometryCB);
 }
