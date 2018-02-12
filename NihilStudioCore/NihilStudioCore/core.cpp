@@ -92,6 +92,12 @@ void NihilCore::navigateScene()
     m_controller = new NihilControl_NavigateScene;
 }
 
+void NihilCore::selectObject()
+{
+    destroyController();
+    m_controller = new NihilControl_SelectObject(this);
+}
+
 #define NIHIL_BLANKS _t(" \t\v\r\n\f")
 
 static bool badEof(const gs::string& src, int curr)
@@ -641,4 +647,76 @@ bool NihilControl_NavigateScene::onMsg(NihilCore* core, UINT message, WPARAM wPa
     }
     }
     return false;
+}
+
+NihilControl_SelectObject::NihilControl_SelectObject(NihilCore* core)
+    : m_polygonList(core->m_polygonList)
+{
+    setupHittestTable(core->getSceneConfig());
+}
+
+NihilControl_SelectObject::~NihilControl_SelectObject()
+{
+    if (m_pressed)
+    {
+        m_pressed = false;
+        ReleaseCapture();
+    }
+}
+
+bool NihilControl_SelectObject::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    ASSERT(core);
+    switch (message)
+    {
+    case WM_LBUTTONDOWN:
+        SetCapture(core->getHwnd());
+        m_pressed = true;
+        m_lastpt.x = (float)GET_X_LPARAM(lParam);
+        m_lastpt.y = (float)GET_Y_LPARAM(lParam);
+        m_startpt = m_lastpt;
+        break;
+    case WM_LBUTTONUP:
+        if (m_pressed)
+        {
+            ReleaseCapture();
+            m_pressed = false;
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+
+            m_lastpt = pt;
+        }
+        break;
+    case WM_MOUSEMOVE:
+        break;
+    }
+    return false;
+}
+
+static void nihilSetupHittestTableOf(NihilPolygon* polygon, NihilHittestRtree& rtree, gs::matrix& mat)
+{
+    ASSERT(polygon);
+    // 1.transform 
+}
+
+void NihilControl_SelectObject::setupHittestTable(NihilSceneConfig& sceneConfig)
+{
+    m_rtree.destroy();
+    gs::matrix mat;
+    sceneConfig.calcMatrix(mat);
+    for (NihilPolygon* p : m_polygonList)
+    {
+        ASSERT(p);
+        nihilSetupHittestTableOf(p, m_rtree, mat);
+    }
+}
+
+void NihilControl_SelectObject::resetSelectState()
+{
+    for (NihilPolygon* p : m_polygonList)
+    {
+        ASSERT(p);
+        p->setSelected(false);
+    }
 }

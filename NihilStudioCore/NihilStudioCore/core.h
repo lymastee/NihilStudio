@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <gslib/math.h>
 #include <gslib/string.h>
+#include <gslib/rtree.h>
 
 struct NihilVertex
 {
@@ -123,7 +124,7 @@ protected:
 typedef std::vector<NihilPolygon*> NihilPolygonList;
 
 // controllers
-class NihilControl_NavigateScene:
+class NihilControl_NavigateScene :
     public NihilControl
 {
 public:
@@ -137,8 +138,36 @@ private:
     gs::vec2                m_lastpt;
 };
 
+typedef gs::rtree_entity<UINT> NihilHittestEntity;
+typedef gs::rtree_node<NihilHittestEntity> NihilHittestNode;
+typedef gs::_tree_allocator<NihilHittestNode> NihilHittestAlloc;
+typedef gs::tree<NihilHittestEntity, NihilHittestNode, NihilHittestAlloc> NihilHittestTree;
+typedef gs::rtree<NihilHittestEntity, gs::quadratic_split_alg<5, 2, NihilHittestTree>, NihilHittestNode, NihilHittestAlloc> NihilHittestRtree;
+
+class NihilControl_SelectObject :
+    public NihilControl
+{
+public:
+    NihilControl_SelectObject(NihilCore* core);
+    virtual ~NihilControl_SelectObject();
+    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
+
+private:
+    NihilPolygonList&       m_polygonList;
+    NihilHittestRtree       m_rtree;
+    bool                    m_pressed = false;
+    gs::vec2                m_startpt;
+    gs::vec2                m_lastpt;
+
+private:
+    void setupHittestTable(NihilSceneConfig& sceneConfig);
+    void resetSelectState();
+};
+
 class NihilCore
 {
+    friend class NihilControl_SelectObject;
+
 public:
     NihilCore();
     virtual ~NihilCore();
@@ -152,6 +181,7 @@ public:
     void showWireframeMode();
     void destroyController();
     void navigateScene();
+    void selectObject();
     NihilRenderer* getRenderer() const { return m_renderer; }
     NihilControl* getController() const { return m_controller; }
     NihilSceneConfig& getSceneConfig() { return m_sceneConfig; }
