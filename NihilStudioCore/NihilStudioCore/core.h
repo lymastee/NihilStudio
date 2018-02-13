@@ -14,7 +14,7 @@ struct NihilVertex
 
 struct NihilUIVertex
 {
-    gs::vec4                pos;
+    gs::vec3                pos;
     gs::vec4                color;
 };
 
@@ -39,11 +39,20 @@ protected:
 class __declspec(novtable) NihilUIObject abstract
 {
 public:
+    enum Topology
+    {
+        Topo_Points,
+        Topo_LineList,
+    };
+
+public:
     virtual ~NihilUIObject() {}
     virtual bool createVertexStream(NihilUIVertex vertices[], int size) = 0;
     virtual bool createIndexStream(int indices[], int size) = 0;
     virtual bool updateVertexStream(NihilUIVertex vertices[], int size) = 0;
-    //virtual void setLocalMat(const gs::) = 0;
+
+protected:
+    Topology                m_topology = Topo_Points;
 };
 
 class __declspec(novtable) NihilRenderer abstract
@@ -100,6 +109,8 @@ public:
     NihilPolygon(NihilRenderer* renderer);
     ~NihilPolygon();
     int loadPolygonFromTextStream(const NihilString& src, int start);
+    NihilPointList& getPointList() { return m_pointList; }
+    NihilIndexList& getIndexList() { return m_indexList; }
     void setSelected(bool b)
     {
         if (m_geometry)
@@ -122,6 +133,20 @@ protected:
 };
 
 typedef std::vector<NihilPolygon*> NihilPolygonList;
+
+class NihilUIRectangle
+{
+public:
+    NihilUIRectangle(NihilRenderer* renderer);
+    ~NihilUIRectangle();
+    void setTopLeft(float left, float top);
+    void setBottomRight(float right, float bottom);
+
+protected:
+    NihilRenderer*          m_renderer = nullptr;
+    NihilUIObject*          m_rcObject = nullptr;
+    gs::rectf               m_rc;
+};
 
 // controllers
 class NihilControl_NavigateScene :
@@ -147,6 +172,14 @@ typedef gs::rtree<NihilHittestEntity, gs::quadratic_split_alg<5, 2, NihilHittest
 class NihilControl_SelectObject :
     public NihilControl
 {
+protected:
+    struct HittestNode
+    {
+        gs::vec2            triangle[3];
+        int                 index[3];
+    };
+    typedef std::list<HittestNode> HittestNodeCache;
+
 public:
     NihilControl_SelectObject(NihilCore* core);
     virtual ~NihilControl_SelectObject();
@@ -155,13 +188,19 @@ public:
 private:
     NihilPolygonList&       m_polygonList;
     NihilHittestRtree       m_rtree;
+    HittestNodeCache        m_cache;
+    NihilUIRectangle*       m_selectArea = nullptr;
+    NihilRenderer*          m_renderer = nullptr;
     bool                    m_pressed = false;
     gs::vec2                m_startpt;
-    gs::vec2                m_lastpt;
 
 private:
-    void setupHittestTable(NihilSceneConfig& sceneConfig);
+    void setupHittestTable(HWND hwnd, NihilSceneConfig& sceneConfig);
+    void setupHittestTableOf(NihilPolygon* polygon, const gs::matrix& mat, UINT width, UINT height);
     void resetSelectState();
+    void startSelecting();
+    void endSelecting(const gs::vec2& pt);
+    void updateSelecting(const gs::vec2& pt);
 };
 
 class NihilCore

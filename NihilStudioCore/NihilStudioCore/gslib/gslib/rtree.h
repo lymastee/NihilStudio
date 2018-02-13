@@ -923,6 +923,7 @@ public:
         auto i = get_root();
         return query_overlapped(i, q, lookups, out);
     }
+    void insert(bind_arg ba, const pointf& pt) { insert(ba, rectf(pt.x, pt.y, 1.f, 1.f)); }
     void insert(bind_arg ba, const rectf& rc) { alg(*this).insert(ba, rc); }
     void remove(bind_arg ba, const rectf& rc) { alg(*this).remove(ba, rc); }
     void tracing() const

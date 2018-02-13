@@ -84,7 +84,9 @@
     </Link>
     <PreBuildEvent>
       <Command>fxc /T vs_4_0 /E "VS" /Fh "geometry_vs.h" "geometry.hlsl"
-fxc /T ps_4_0 /E "PS" /Fh "geometry_ps.h" "geometry.hlsl"</Command>
+fxc /T ps_4_0 /E "PS" /Fh "geometry_ps.h" "geometry.hlsl"
+fxc /T vs_4_0 /E "UIVS" /Fh "ui_vs.h" "ui.hlsl"
+fxc /T ps_4_0 /E "UIPS" /Fh "ui_ps.h" "ui.hlsl"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -117,7 +119,9 @@ fxc /T ps_4_0 /E "PS" /Fh "geometry_ps.h" "geometry.hlsl"</Command>
     </Link>
     <PreBuildEvent>
       <Command>fxc /T vs_4_0 /E "VS" /Fh "geometry_vs.h" "geometry.hlsl"
-fxc /T ps_4_0 /E "PS" /Fh "geometry_ps.h" "geometry.hlsl"</Command>
+fxc /T ps_4_0 /E "PS" /Fh "geometry_ps.h" "geometry.hlsl"
+fxc /T vs_4_0 /E "UIVS" /Fh "ui_vs.h" "ui.hlsl"
+fxc /T ps_4_0 /E "UIPS" /Fh "ui_ps.h" "ui.hlsl"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

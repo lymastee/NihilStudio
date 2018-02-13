@@ -1,9 +1,13 @@
 #include <assert.h>
 #include <windowsx.h>
+#include <algorithm>
+#include <gslib/error.h>
 #include "core.h"
 #include "dx11renderer.h"
 
 #define ASSERT assert
+#undef min
+#undef max
 
 NihilCore::NihilCore()
 {
@@ -652,15 +656,23 @@ bool NihilControl_NavigateScene::onMsg(NihilCore* core, UINT message, WPARAM wPa
 NihilControl_SelectObject::NihilControl_SelectObject(NihilCore* core)
     : m_polygonList(core->m_polygonList)
 {
-    setupHittestTable(core->getSceneConfig());
+    ASSERT(core);
+    m_renderer = core->getRenderer();
+    setupHittestTable(core->getHwnd(), core->getSceneConfig());
 }
 
 NihilControl_SelectObject::~NihilControl_SelectObject()
 {
+    m_renderer = nullptr;
     if (m_pressed)
     {
         m_pressed = false;
         ReleaseCapture();
+    }
+    if (m_selectArea)
+    {
+        delete m_selectArea;
+        m_selectArea = nullptr;
     }
 }
 
@@ -672,9 +684,9 @@ bool NihilControl_SelectObject::onMsg(NihilCore* core, UINT message, WPARAM wPar
     case WM_LBUTTONDOWN:
         SetCapture(core->getHwnd());
         m_pressed = true;
-        m_lastpt.x = (float)GET_X_LPARAM(lParam);
-        m_lastpt.y = (float)GET_Y_LPARAM(lParam);
-        m_startpt = m_lastpt;
+        m_startpt.x = (float)GET_X_LPARAM(lParam);
+        m_startpt.y = (float)GET_Y_LPARAM(lParam);
+        startSelecting();
         break;
     case WM_LBUTTONUP:
         if (m_pressed)
@@ -684,31 +696,102 @@ bool NihilControl_SelectObject::onMsg(NihilCore* core, UINT message, WPARAM wPar
             gs::vec2 pt;
             pt.x = (float)GET_X_LPARAM(lParam);
             pt.y = (float)GET_Y_LPARAM(lParam);
-
-            m_lastpt = pt;
+            endSelecting(pt);
         }
         break;
     case WM_MOUSEMOVE:
+        if (m_pressed)
+        {
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            updateSelecting(pt);
+        }
         break;
     }
     return false;
 }
 
-static void nihilSetupHittestTableOf(NihilPolygon* polygon, NihilHittestRtree& rtree, gs::matrix& mat)
+static void nihilBoundaryRect(gs::rectf& rc, const gs::vec2& p1, const gs::vec2& p2, const gs::vec2& p3)
 {
-    ASSERT(polygon);
-    // 1.transform 
+    float left, right, top, bottom;
+    left = top = FLT_MAX;
+    right = bottom = -FLT_MAX;
+    left = std::min(std::min(p1.x, p2.x), p3.x);
+    top = std::min(std::min(p1.y, p2.y), p3.y);
+    right = std::max(std::max(p1.x, p2.x), p3.x);
+    bottom = std::max(std::max(p1.y, p2.y), p3.y);
+    rc.set_ltrb(left, top, right, bottom);
 }
 
-void NihilControl_SelectObject::setupHittestTable(NihilSceneConfig& sceneConfig)
+void NihilControl_SelectObject::setupHittestTableOf(NihilPolygon* polygon, const gs::matrix& mat, UINT width, UINT height)
+{
+    ASSERT(polygon);
+    // 1.ndc => screen space
+    gs::matrix ssm;
+    ssm.multiply(mat, gs::matrix().scaling(0.5f * width, -0.5f * height, 0.f));
+    ssm.multiply(gs::matrix().translation(0.5f * width, 0.5f * height, 0.f));
+    // 2.transform points
+    NihilPointList& pointList = polygon->getPointList();
+    std::vector<gs::vec2> dupPoints;
+    dupPoints.resize(pointList.size());
+    int i = 0;
+    for (NihilVertex& v : pointList)
+    {
+        gs::vec4 t;
+        v.pos.transform(t, ssm);
+        t.scale(1.f / t.w);
+        dupPoints.at(i ++) = (const gs::vec2&)t;
+    }
+    // 3.setup rtree
+    NihilIndexList& indexList = polygon->getIndexList();
+    ASSERT(indexList.size() % 3 == 0);
+    for (i = 0; i < (int)indexList.size(); i += 3)
+    {
+        int a = indexList.at(i);
+        int b = indexList.at(i + 1);
+        int c = indexList.at(i + 2);
+        const gs::vec2& p1 = dupPoints.at(a);
+        const gs::vec2& p2 = dupPoints.at(b);
+        const gs::vec2& p3 = dupPoints.at(c);
+        bool isccw = gs::vec2().sub(p2, p1).ccw(gs::vec2().sub(p3, p2)) > 0.f;
+        if (isccw)  // flip y already make counter clockwised.
+        {
+            m_cache.push_back(HittestNode());
+            HittestNode& node = m_cache.back();
+            node.triangle[0] = p1;
+            node.triangle[1] = p2;
+            node.triangle[2] = p3;
+#if 0
+            gs::trace(_t("@moveTo %f, %f;\n"), p1.x, p1.y);
+            gs::trace(_t("@lineTo %f, %f;\n"), p2.x, p2.y);
+            gs::trace(_t("@lineTo %f, %f;\n"), p3.x, p3.y);
+            gs::trace(_t("@lineTo %f, %f;\n"), p1.x, p1.y);
+#endif
+            node.index[0] = a;
+            node.index[1] = b;
+            node.index[2] = c;
+            gs::rectf rc;
+            nihilBoundaryRect(rc, p1, p2, p3);
+            m_rtree.insert((UINT)&node, rc);
+        }
+    }
+}
+
+void NihilControl_SelectObject::setupHittestTable(HWND hwnd, NihilSceneConfig& sceneConfig)
 {
     m_rtree.destroy();
+    m_cache.clear();
     gs::matrix mat;
     sceneConfig.calcMatrix(mat);
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    UINT width = rc.right - rc.left;
+    UINT height = rc.bottom - rc.top;
     for (NihilPolygon* p : m_polygonList)
     {
         ASSERT(p);
-        nihilSetupHittestTableOf(p, m_rtree, mat);
+        setupHittestTableOf(p, mat, width, height);
     }
 }
 
@@ -719,4 +802,20 @@ void NihilControl_SelectObject::resetSelectState()
         ASSERT(p);
         p->setSelected(false);
     }
+}
+
+void NihilControl_SelectObject::startSelecting()
+{
+    if (m_selectArea)
+        delete m_selectArea;
+    m_selectArea = new NihilUIRectangle(m_renderer);
+    ASSERT(m_selectArea);
+}
+
+void NihilControl_SelectObject::endSelecting(const gs::vec2& pt)
+{
+}
+
+void NihilControl_SelectObject::updateSelecting(const gs::vec2& pt)
+{
 }

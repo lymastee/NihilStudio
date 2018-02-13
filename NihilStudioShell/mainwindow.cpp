@@ -91,3 +91,8 @@ void MainWindow::on_actionClose_triggered()
 {
     close();
 }
+
+void MainWindow::on_actionSelect_Objects_triggered()
+{
+    m_core.selectObject();
+}

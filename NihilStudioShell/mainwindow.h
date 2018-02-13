@@ -29,6 +29,8 @@ private slots:
 
     void on_actionClose_triggered();
 
+    void on_actionSelect_Objects_triggered();
+
 private:
     Ui::MainWindow *ui;
 

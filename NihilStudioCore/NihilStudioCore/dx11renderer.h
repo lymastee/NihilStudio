@@ -8,10 +8,6 @@
 #include <dxgi1_2.h>
 #include <unordered_set>
 
-// compiled shader
-#include "geometry_vs.h"
-#include "geometry_ps.h"
-
 class NihilDx11Geometry :
     public NihilGeometry
 {
@@ -51,6 +47,10 @@ public:
     virtual bool createIndexStream(int indices[], int size) override;
     virtual bool updateVertexStream(NihilUIVertex vertices[], int size) override;
 
+public:
+    void setupIndexVertexBuffers(NihilDx11Renderer* renderer);
+    void render(NihilDx11Renderer* renderer);
+
 private:
     NihilDx11Renderer*          m_renderer = nullptr;
     ID3D11Buffer*               m_vb = nullptr;
@@ -66,10 +66,15 @@ class NihilDx11Renderer :
     public NihilRenderer
 {
 public:
-    struct ConstantBuffer
+    struct GeometryCB
     {
         gs::matrix              mvp;
         gs::vec3                diffuseColor;
+    };
+
+    struct UICB
+    {
+        gs::matrix              mat;
     };
 
 public:
@@ -108,20 +113,24 @@ protected:
     ID3D11VertexShader*         m_uiVS = nullptr;
     ID3D11PixelShader*          m_uiPS = nullptr;
     ID3D11InputLayout*          m_uiInputLayout = nullptr;
+    ID3D11Buffer*               m_uiCB = nullptr;
     NihilGeometrySet            m_geometrySet;
     NihilUIObjectSet            m_uiSet;
     gs::matrix                  m_worldMat;
+    gs::matrix                  m_screenMat;
 
 private:
     void destroy();
     void clearRenderSets();
     void setupViewpoints(UINT width, UINT height);
+    void setupScreenMatrix(UINT width, UINT height);
     bool setupShaderOfGeometry();
     bool setupShaderOfUI();
     void beginRender();
     void endRender();
     void renderGeometryBatch();
     void renderUIBatch();
+    void setupUIConstantBuffer();
     void setupConstantBufferForGeometry(NihilDx11Geometry* geometry);
 };
 

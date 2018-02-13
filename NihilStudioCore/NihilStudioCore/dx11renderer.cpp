@@ -1,6 +1,14 @@
 #include <assert.h>
 #include "dx11renderer.h"
 
+#ifdef _NIHIL_USE_DX11
+
+// compiled shader
+#include "geometry_vs.h"
+#include "geometry_ps.h"
+#include "ui_vs.h"
+#include "ui_ps.h"
+
 #define ASSERT assert
 
 #ifndef SAFE_RELEASE
@@ -127,17 +135,98 @@ NihilDx11UIObject::~NihilDx11UIObject()
 
 bool NihilDx11UIObject::createVertexStream(NihilUIVertex vertices[], int size)
 {
+    D3D11_BUFFER_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Usage = D3D11_USAGE_DYNAMIC;
+    desc.ByteWidth = sizeof(NihilUIVertex) * size;
+    desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+    D3D11_SUBRESOURCE_DATA data;
+    ZeroMemory(&data, sizeof(data));
+    data.pSysMem = vertices;
+
+    ASSERT(m_renderer);
+    ID3D11Device* device = m_renderer->getDevice();
+    ASSERT(device && !m_vb);
+    HRESULT hr = device->CreateBuffer(&desc, &data, &m_vb);
+    if (FAILED(hr))
+        return false;
+
+    m_verticeCount = size;
+    ASSERT(m_vb);
     return true;
 }
 
 bool NihilDx11UIObject::createIndexStream(int indices[], int size)
 {
+    D3D11_BUFFER_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.ByteWidth = sizeof(int) * size;
+    desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    desc.CPUAccessFlags = 0;
+
+    D3D11_SUBRESOURCE_DATA data;
+    ZeroMemory(&data, sizeof(data));
+    data.pSysMem = indices;
+
+    ASSERT(m_renderer);
+    ID3D11Device* device = m_renderer->getDevice();
+    ASSERT(device && !m_ib);
+    HRESULT hr = device->CreateBuffer(&desc, &data, &m_ib);
+    if (FAILED(hr))
+        return false;
+
+    m_indicesCount = size;
+    ASSERT(m_ib);
     return true;
 }
 
 bool NihilDx11UIObject::updateVertexStream(NihilUIVertex vertices[], int size)
 {
     return true;
+}
+
+void NihilDx11UIObject::setupIndexVertexBuffers(NihilDx11Renderer* renderer)
+{
+    ASSERT(renderer);
+    ID3D11DeviceContext* context = renderer->getImmediateContext();
+    ASSERT(context);
+    switch (m_topology)
+    {
+    case Topo_Points:
+        context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);
+        break;
+    case Topo_LineList:
+        context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
+        break;
+    default:
+        ASSERT(!"Unexpected topology.");
+        break;
+    }
+    if (m_vb)
+    {
+        UINT stride = sizeof(NihilUIVertex);
+        UINT offset = 0;
+        context->IASetVertexBuffers(0, 1, &m_vb, &stride, &offset);
+    }
+    if (m_ib)
+        context->IASetIndexBuffer(m_ib, DXGI_FORMAT_R32_UINT, 0);
+}
+
+void NihilDx11UIObject::render(NihilDx11Renderer* renderer)
+{
+    ASSERT(renderer);
+    ASSERT(m_vb);
+    ID3D11DeviceContext* context = renderer->getImmediateContext();
+    ASSERT(context);
+    if (!m_ib)
+    {
+        context->Draw(m_verticeCount, 0);
+        return;
+    }
+    context->DrawIndexed(m_indicesCount, 0);
 }
 
 NihilDx11Renderer::NihilDx11Renderer()
@@ -329,6 +418,7 @@ bool NihilDx11Renderer::setup(HWND hwnd)
     pDepthBuffer->Release();
 
     setupViewpoints(width, height);
+    setupScreenMatrix(width, height);
     return setupShaderOfGeometry() && setupShaderOfUI();
 }
 
@@ -372,6 +462,7 @@ void NihilDx11Renderer::notifyResize()
     m_immediateContext->OMSetRenderTargets(1, &m_rtv, m_dsv);
 
     setupViewpoints(width, height);
+    setupScreenMatrix(width, height);
 }
 
 void NihilDx11Renderer::setWorldMat(const gs::matrix& m)
@@ -451,6 +542,7 @@ void NihilDx11Renderer::destroy()
     SAFE_RELEASE(m_uiInputLayout);
     SAFE_RELEASE(m_uiPS);
     SAFE_RELEASE(m_uiVS);
+    SAFE_RELEASE(m_uiCB);
     SAFE_RELEASE(m_geometryInputLayout);
     SAFE_RELEASE(m_geometryCB);
     SAFE_RELEASE(m_geometryPS);
@@ -482,6 +574,11 @@ void NihilDx11Renderer::setupViewpoints(UINT width, UINT height)
     m_immediateContext->RSSetViewports(1, &vp);
 }
 
+void NihilDx11Renderer::setupScreenMatrix(UINT width, UINT height)
+{
+    m_screenMat.multiply(gs::matrix().scaling(2.f / width, -2.f / height, 0.f), gs::matrix().translation(-1.f, 1.f, 0.f));
+}
+
 bool NihilDx11Renderer::setupShaderOfGeometry()
 {
     ASSERT(m_device);
@@ -501,9 +598,9 @@ bool NihilDx11Renderer::setupShaderOfGeometry()
     if (FAILED(hr))
         return false;
     D3D11_BUFFER_DESC desc;
-    memset(&desc, 0, sizeof(desc));
+    ZeroMemory(&desc, sizeof(desc));
     desc.Usage = D3D11_USAGE_DYNAMIC;
-    desc.ByteWidth = PackCbSize(sizeof(ConstantBuffer));
+    desc.ByteWidth = PackCbSize(sizeof(GeometryCB));
     desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     hr = m_device->CreateBuffer(&desc, nullptr, &m_geometryCB);
@@ -512,7 +609,30 @@ bool NihilDx11Renderer::setupShaderOfGeometry()
 
 bool NihilDx11Renderer::setupShaderOfUI()
 {
-    return true;
+    ASSERT(m_device);
+    HRESULT hr = m_device->CreateVertexShader(g_UIVS, sizeof(g_UIVS), nullptr, &m_uiVS);
+    if (FAILED(hr))
+        return false;
+    D3D11_INPUT_ELEMENT_DESC layout[] =
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    UINT numElements = ARRAYSIZE(layout);
+    hr = m_device->CreateInputLayout(layout, numElements, g_UIVS, sizeof(g_UIVS), &m_uiInputLayout);
+    if (FAILED(hr))
+        return false;
+    hr = m_device->CreatePixelShader(g_UIPS, sizeof(g_UIPS), nullptr, &m_uiPS);
+    if (FAILED(hr))
+        return false;
+    D3D11_BUFFER_DESC desc;
+    ZeroMemory(&desc, sizeof(desc));
+    desc.Usage = D3D11_USAGE_DYNAMIC;
+    desc.ByteWidth = PackCbSize(sizeof(UICB));
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    hr = m_device->CreateBuffer(&desc, nullptr, &m_uiCB);
+    return SUCCEEDED(hr);
 }
 
 void NihilDx11Renderer::clearRenderSets()
@@ -560,6 +680,18 @@ void NihilDx11Renderer::renderGeometryBatch()
 
 void NihilDx11Renderer::renderUIBatch()
 {
+    ASSERT(m_immediateContext);
+    m_immediateContext->IASetInputLayout(m_uiInputLayout);
+    m_immediateContext->VSSetShader(m_uiVS, nullptr, 0);
+    m_immediateContext->PSSetShader(m_uiPS, nullptr, 0);
+    setupUIConstantBuffer();
+    for (auto * p : m_uiSet)
+    {
+        ASSERT(p);
+        auto* pUI = static_cast<NihilDx11UIObject*>(p);
+        pUI->setupIndexVertexBuffers(this);
+        pUI->render(this);
+    }
 }
 
 void NihilDx11Renderer::setupConstantBufferForGeometry(NihilDx11Geometry* geometry)
@@ -571,7 +703,7 @@ void NihilDx11Renderer::setupConstantBufferForGeometry(NihilDx11Geometry* geomet
     D3D11_MAPPED_SUBRESOURCE mappedRes;
     ZeroMemory(&mappedRes, sizeof(mappedRes));
     m_immediateContext->Map(m_geometryCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
-    auto* data = (ConstantBuffer*)mappedRes.pData;
+    auto* data = (GeometryCB*)mappedRes.pData;
     data->mvp = m;
     if (geometry->isSelected())
         data->diffuseColor = gs::vec3(0.9f, 0.2f, 0.f);
@@ -580,3 +712,18 @@ void NihilDx11Renderer::setupConstantBufferForGeometry(NihilDx11Geometry* geomet
     m_immediateContext->Unmap(m_geometryCB, 0);
     m_immediateContext->VSSetConstantBuffers(0, 1, &m_geometryCB);
 }
+
+void NihilDx11Renderer::setupUIConstantBuffer()
+{
+    gs::matrix m = m_screenMat;
+    m.transpose();
+    D3D11_MAPPED_SUBRESOURCE mappedRes;
+    ZeroMemory(&mappedRes, sizeof(mappedRes));
+    m_immediateContext->Map(m_uiCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
+    auto* data = (UICB*)mappedRes.pData;
+    data->mat = m;
+    m_immediateContext->Unmap(m_uiCB, 0);
+    m_immediateContext->VSSetConstantBuffers(0, 1, &m_uiCB);
+}
+
+#endif
