@@ -89,16 +89,14 @@ bool NihilDx11Geometry::updateVertexStream(NihilVertex vertices[], int size)
 {
     ASSERT(vertices);
     ASSERT(m_verticeCount == size);
-
     ASSERT(m_renderer);
     ID3D11DeviceContext* immContext = m_renderer->getImmediateContext();
     ASSERT(immContext);
     D3D11_MAPPED_SUBRESOURCE mappedRes;
     ZeroMemory(&mappedRes, sizeof(mappedRes));
-    immContext->Map(m_vb, 0, D3D11_MAP_WRITE, 0, &mappedRes);
+    immContext->Map(m_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
     // todo:
     immContext->Unmap(m_vb, 0);
-
     return true;
 }
 
@@ -185,6 +183,16 @@ bool NihilDx11UIObject::createIndexStream(int indices[], int size)
 
 bool NihilDx11UIObject::updateVertexStream(NihilUIVertex vertices[], int size)
 {
+    ASSERT(vertices);
+    ASSERT(m_verticeCount == size);
+    ASSERT(m_renderer);
+    ID3D11DeviceContext* context = m_renderer->getImmediateContext();
+    ASSERT(context);
+    D3D11_MAPPED_SUBRESOURCE mappedRes;
+    ZeroMemory(&mappedRes, sizeof(mappedRes));
+    context->Map(m_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
+    memcpy_s(mappedRes.pData, sizeof(NihilUIVertex) * size, vertices, sizeof(NihilUIVertex) * size);
+    context->Unmap(m_vb, 0);
     return true;
 }
 
@@ -226,7 +234,7 @@ void NihilDx11UIObject::render(NihilDx11Renderer* renderer)
         context->Draw(m_verticeCount, 0);
         return;
     }
-    context->DrawIndexed(m_indicesCount, 0);
+    context->DrawIndexed(m_indicesCount, 0, 0);
 }
 
 NihilDx11Renderer::NihilDx11Renderer()
@@ -616,7 +624,7 @@ bool NihilDx11Renderer::setupShaderOfUI()
     D3D11_INPUT_ELEMENT_DESC layout[] =
     {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
     };
     UINT numElements = ARRAYSIZE(layout);
     hr = m_device->CreateInputLayout(layout, numElements, g_UIVS, sizeof(g_UIVS), &m_uiInputLayout);
@@ -658,7 +666,7 @@ void NihilDx11Renderer::beginRender()
 void NihilDx11Renderer::endRender()
 {
     ASSERT(m_swapChain);
-    m_swapChain->Present(1, 0);
+    m_swapChain->Present(0, 0);
 }
 
 void NihilDx11Renderer::renderGeometryBatch()
@@ -706,7 +714,7 @@ void NihilDx11Renderer::setupConstantBufferForGeometry(NihilDx11Geometry* geomet
     auto* data = (GeometryCB*)mappedRes.pData;
     data->mvp = m;
     if (geometry->isSelected())
-        data->diffuseColor = gs::vec3(0.9f, 0.2f, 0.f);
+        data->diffuseColor = gs::vec3(0.6f, 0.6f, 0.5f);
     else
         data->diffuseColor = gs::vec3(0.6f, 0.f, 0.f);
     m_immediateContext->Unmap(m_geometryCB, 0);

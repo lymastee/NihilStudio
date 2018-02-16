@@ -4,14 +4,14 @@
     <LocalDebuggerEnvironment>PATH=%PATH%;C:\Qt\Qt5.10\5.10.0\msvc2015\bin</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerCommand>NihilStudio.exe</LocalDebuggerCommand>
-    <LocalDebuggerWorkingDirectory>F:\Mine\NihilStudio\build-NihilStudio-Desktop_Qt_5_10_0_MSVC2015_32bit-Debug\debug\</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>c:\projects\NihilStudio\build-NihilStudio-Desktop_Qt_5_10_0_MSVC2015_32bit-Debug\debug\</LocalDebuggerWorkingDirectory>
     <LocalDebuggerMergeEnvironment>true</LocalDebuggerMergeEnvironment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LocalDebuggerEnvironment>PATH=%PATH%;C:\Qt\Qt5.10\5.10.0\msvc2015\bin</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerCommand>NihilStudio.exe</LocalDebuggerCommand>
-    <LocalDebuggerWorkingDirectory>F:\Mine\NihilStudio\build-NihilStudio-Desktop_Qt_5_10_0_MSVC2015_32bit-Debug\debug\</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>c:\projects\NihilStudio\build-NihilStudio-Desktop_Qt_5_10_0_MSVC2015_32bit-Debug\debug\</LocalDebuggerWorkingDirectory>
     <LocalDebuggerMergeEnvironment>true</LocalDebuggerMergeEnvironment>
   </PropertyGroup>
 </Project>

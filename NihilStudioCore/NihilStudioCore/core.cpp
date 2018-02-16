@@ -102,6 +102,12 @@ void NihilCore::selectObject()
     m_controller = new NihilControl_SelectObject(this);
 }
 
+void NihilCore::selectPoints()
+{
+    destroyController();
+    m_controller = new NihilControl_SelectPoints(this);
+}
+
 #define NIHIL_BLANKS _t(" \t\v\r\n\f")
 
 static bool badEof(const gs::string& src, int curr)
@@ -341,7 +347,7 @@ void NihilSceneConfig::updateRotation(const gs::vec2& lastpt, const gs::vec2& pt
 
 void NihilSceneConfig::updateZooming(float d)
 {
-    m_cdis += (d * 0.1f);
+    m_cdis += (d * 0.8f);
     updateViewMatrix();
 }
 
@@ -570,6 +576,92 @@ int NihilPolygon::loadLocalSectionFromTextStream(const NihilString& src, int sta
     return 666;
 }
 
+NihilUIRectangle::NihilUIRectangle(NihilRenderer* renderer)
+{
+    ASSERT(renderer);
+    m_renderer = renderer;
+    m_rcObject = renderer->addUIObject();
+    ASSERT(m_rcObject);
+    m_rcObject->setTopology(NihilUIObject::Topo_LineList);
+}
+
+NihilUIRectangle::~NihilUIRectangle()
+{
+    ASSERT(m_renderer && m_rcObject);
+    m_renderer->removeUIObject(m_rcObject);
+    m_renderer = nullptr;
+    m_rcObject = nullptr;
+}
+
+void NihilUIRectangle::setTopLeft(float left, float top)
+{
+    m_rc.set_rect(left, top, 0.f, 0.f);
+}
+
+void NihilUIRectangle::setBottomRight(float right, float bottom)
+{
+    m_rc.right = right;
+    m_rc.bottom = bottom;
+}
+
+void NihilUIRectangle::setupBuffers()
+{
+    NihilUIVertex vertices[4];
+    calcVertexBuffer(vertices);
+    m_rcObject->createVertexStream(vertices, 4);
+    static int indices[] = { 0, 1, 1, 2, 2, 3, 3, 0 };
+    m_rcObject->createIndexStream(indices, _countof(indices));
+}
+
+void NihilUIRectangle::updateBuffer()
+{
+    NihilUIVertex vertices[4];
+    calcVertexBuffer(vertices);
+    m_rcObject->updateVertexStream(vertices, 4);
+}
+
+void NihilUIRectangle::calcVertexBuffer(NihilUIVertex vertices[4])
+{
+    ASSERT(vertices);
+    static const gs::vec4 cr(0.5f, 0.6f, 0.5f, 1.f);
+    // topLeft -> topRight -> bottomRight -> bottomLeft
+    vertices[0].pos = gs::vec3(m_rc.left, m_rc.top, 0.f);
+    vertices[1].pos = gs::vec3(m_rc.right, m_rc.top, 0.f);
+    vertices[2].pos = gs::vec3(m_rc.right, m_rc.bottom, 0.f);
+    vertices[3].pos = gs::vec3(m_rc.left, m_rc.bottom, 0.f);
+    vertices[0].color = cr;
+    vertices[1].color = cr;
+    vertices[2].color = cr;
+    vertices[3].color = cr;
+}
+
+NihilUIPoints::NihilUIPoints(NihilRenderer* renderer)
+{
+    ASSERT(renderer);
+    m_renderer = renderer;
+    m_rcObject = renderer->addUIObject();
+    ASSERT(m_rcObject);
+    m_rcObject->setTopology(NihilUIObject::Topo_Points);
+}
+
+NihilUIPoints::~NihilUIPoints()
+{
+    ASSERT(m_renderer && m_rcObject);
+    m_renderer->removeUIObject(m_rcObject);
+    m_renderer = nullptr;
+    m_rcObject = nullptr;
+}
+
+template<class _Cont>
+void NihilUIPoints::setupBuffers(const _Cont& src, const gs::vec4& cr)
+{
+}
+
+template<class _Cont>
+void NihilUIPoints::updateBuffer(const _Cont& src)
+{
+}
+
 NihilControl_NavigateScene::NihilControl_NavigateScene()
 {
 }
@@ -712,6 +804,18 @@ bool NihilControl_SelectObject::onMsg(NihilCore* core, UINT message, WPARAM wPar
     return false;
 }
 
+static void nihilBoundaryRect(gs::rectf& rc, const gs::vec2& p1, const gs::vec2& p2)
+{
+    float left, right, top, bottom;
+    left = top = FLT_MAX;
+    right = bottom = -FLT_MAX;
+    left = std::min(p1.x, p2.x);
+    right = std::max(p1.x, p2.x);
+    top = std::min(p1.y, p2.y);
+    bottom = std::max(p1.y, p2.y);
+    rc.set_ltrb(left, top, right, bottom);
+}
+
 static void nihilBoundaryRect(gs::rectf& rc, const gs::vec2& p1, const gs::vec2& p2, const gs::vec2& p3)
 {
     float left, right, top, bottom;
@@ -771,6 +875,7 @@ void NihilControl_SelectObject::setupHittestTableOf(NihilPolygon* polygon, const
             node.index[0] = a;
             node.index[1] = b;
             node.index[2] = c;
+            node.geometry = polygon->getGeometry();
             gs::rectf rc;
             nihilBoundaryRect(rc, p1, p2, p3);
             m_rtree.insert((UINT)&node, rc);
@@ -810,12 +915,126 @@ void NihilControl_SelectObject::startSelecting()
         delete m_selectArea;
     m_selectArea = new NihilUIRectangle(m_renderer);
     ASSERT(m_selectArea);
+    m_selectArea->setTopLeft(m_startpt.x, m_startpt.y);
+    m_selectArea->setupBuffers();
 }
 
 void NihilControl_SelectObject::endSelecting(const gs::vec2& pt)
 {
+    ASSERT(m_selectArea);
+    delete m_selectArea;
+    m_selectArea = nullptr;
+    resetSelectState();
+    gs::rectf rc;
+    nihilBoundaryRect(rc, m_startpt, pt);
+    hitTest(rc);
 }
 
 void NihilControl_SelectObject::updateSelecting(const gs::vec2& pt)
+{
+    ASSERT(m_selectArea);
+    m_selectArea->setBottomRight(pt.x, pt.y);
+    m_selectArea->updateBuffer();
+}
+
+void NihilControl_SelectObject::hitTest(const gs::rectf& rc)
+{
+    // 1.hit through rtree
+    std::vector<UINT> hittable;
+    m_rtree.query(rc, hittable);
+    // 2.todo: test if the rect overlaps these triangles then filter them again.
+    // 3.tag them
+    for (UINT u : hittable)
+    {
+        auto* node = reinterpret_cast<HittestNode*>(u);
+        node->geometry->setSelected(true);
+    }
+}
+
+NihilControl_SelectPoints::NihilControl_SelectPoints(NihilCore* core)
+{
+    ASSERT(core);
+    m_renderer = core->getRenderer();
+}
+
+NihilControl_SelectPoints::~NihilControl_SelectPoints()
+{
+    m_renderer = nullptr;
+    if (m_pressed)
+    {
+        m_pressed = false;
+        ReleaseCapture();
+    }
+    if (m_selectArea)
+    {
+        delete m_selectArea;
+        m_selectArea = nullptr;
+    }
+}
+
+bool NihilControl_SelectPoints::onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    ASSERT(core);
+    switch(message)
+    {
+    case WM_LBUTTONDOWN:
+        SetCapture(core->getHwnd());
+        m_pressed = true;
+        m_startpt.x = (float)GET_X_LPARAM(lParam);
+        m_startpt.y = (float)GET_Y_LPARAM(lParam);
+        startSelecting();
+        break;
+    case WM_LBUTTONUP:
+        if (m_pressed)
+        {
+            ReleaseCapture();
+            m_pressed = false;
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            endSelecting(pt);
+        }
+        break;
+    case WM_MOUSEMOVE:
+        if (m_pressed)
+        {
+            gs::vec2 pt;
+            pt.x = (float)GET_X_LPARAM(lParam);
+            pt.y = (float)GET_Y_LPARAM(lParam);
+            updateSelecting(pt);
+        }
+        break;
+    }
+    return false;
+}
+
+void NihilControl_SelectPoints::startSelecting()
+{
+    if (m_selectArea)
+        delete m_selectArea;
+    m_selectArea = new NihilUIRectangle(m_renderer);
+    ASSERT(m_selectArea);
+    m_selectArea->setTopLeft(m_startpt.x, m_startpt.y);
+    m_selectArea->setupBuffers();
+}
+
+void NihilControl_SelectPoints::endSelecting(const gs::vec2& pt)
+{
+    ASSERT(m_selectArea);
+    delete m_selectArea;
+    m_selectArea = nullptr;
+
+    gs::rectf rc;
+    nihilBoundaryRect(rc, m_startpt, pt);
+}
+
+void NihilControl_SelectPoints::updateSelecting(const gs::vec2& pt)
+{
+    ASSERT(m_selectArea);
+    m_selectArea->setBottomRight(pt.x, pt.y);
+    m_selectArea->updateBuffer();
+}
+
+void NihilControl_SelectPoints::hitTest(const gs::rectf& rc)
 {
 }

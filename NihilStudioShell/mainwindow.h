@@ -31,6 +31,8 @@ private slots:
 
     void on_actionSelect_Objects_triggered();
 
+    void on_actionSelect_Points_triggered();
+
 private:
     Ui::MainWindow *ui;
 

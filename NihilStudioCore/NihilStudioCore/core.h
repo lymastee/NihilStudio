@@ -51,6 +51,9 @@ public:
     virtual bool createIndexStream(int indices[], int size) = 0;
     virtual bool updateVertexStream(NihilUIVertex vertices[], int size) = 0;
 
+public:
+    void setTopology(Topology topo) { m_topology = topo; }
+
 protected:
     Topology                m_topology = Topo_Points;
 };
@@ -92,7 +95,7 @@ public:
 private:
     float                   m_rot1 = 0.f;           // first rotation angle, in x-z plane, rotate in y-axis
     float                   m_rot2 = 0.f;           // second rotation angle, in rot1 plane
-    float                   m_cdis = 4.f;           // camera distance
+    float                   m_cdis = 20.f;           // camera distance
     gs::vec3                m_viewOffset = gs::vec3(0.f, 0.f, 0.f);
     gs::matrix              m_model;
     gs::matrix              m_viewLookat;
@@ -111,6 +114,7 @@ public:
     int loadPolygonFromTextStream(const NihilString& src, int start);
     NihilPointList& getPointList() { return m_pointList; }
     NihilIndexList& getIndexList() { return m_indexList; }
+    NihilGeometry* getGeometry() const { return m_geometry; }
     void setSelected(bool b)
     {
         if (m_geometry)
@@ -141,11 +145,35 @@ public:
     ~NihilUIRectangle();
     void setTopLeft(float left, float top);
     void setBottomRight(float right, float bottom);
+    void setupBuffers();
+    void updateBuffer();
 
 protected:
     NihilRenderer*          m_renderer = nullptr;
     NihilUIObject*          m_rcObject = nullptr;
     gs::rectf               m_rc;
+
+protected:
+    void calcVertexBuffer(NihilUIVertex vertices[4]);
+};
+
+typedef std::vector<NihilUIVertex> NihilUIVertices;
+
+class NihilUIPoints
+{
+public:
+    NihilUIPoints(NihilRenderer* renderer);
+    ~NihilUIPoints();
+    template<class _Cont>
+    void setupBuffers(const _Cont& src, const gs::vec4& cr);
+    template<class _Cont>
+    void updateBuffer(const _Cont& src);
+
+protected:
+    NihilRenderer*          m_renderer = nullptr;
+    NihilUIObject*          m_rcObject = nullptr;
+    NihilUIVertices         m_vertices;
+    gs::vec4                m_color;
 };
 
 // controllers
@@ -177,6 +205,7 @@ protected:
     {
         gs::vec2            triangle[3];
         int                 index[3];
+        NihilGeometry*      geometry;
     };
     typedef std::list<HittestNode> HittestNodeCache;
 
@@ -201,6 +230,35 @@ private:
     void startSelecting();
     void endSelecting(const gs::vec2& pt);
     void updateSelecting(const gs::vec2& pt);
+    void hitTest(const gs::rectf& rc);
+};
+
+class NihilControl_SelectPoints :
+    public NihilControl
+{
+protected:
+    struct VertexInfo
+    {
+        gs::vec2            screenPos;
+    };
+
+public:
+    NihilControl_SelectPoints(NihilCore* core);
+    virtual ~NihilControl_SelectPoints();
+    virtual bool onMsg(NihilCore* core, UINT message, WPARAM wParam, LPARAM lParam) override;
+
+private:
+    NihilPolygonList        m_selectedPolygons;
+    NihilUIRectangle*       m_selectArea = nullptr;
+    NihilRenderer*          m_renderer = nullptr;
+    bool                    m_pressed = false;
+    gs::vec2                m_startpt;
+
+private:
+    void startSelecting();
+    void endSelecting(const gs::vec2& pt);
+    void updateSelecting(const gs::vec2& pt);
+    void hitTest(const gs::rectf& rc);
 };
 
 class NihilCore
@@ -221,6 +279,7 @@ public:
     void destroyController();
     void navigateScene();
     void selectObject();
+    void selectPoints();
     NihilRenderer* getRenderer() const { return m_renderer; }
     NihilControl* getController() const { return m_controller; }
     NihilSceneConfig& getSceneConfig() { return m_sceneConfig; }

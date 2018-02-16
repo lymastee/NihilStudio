@@ -96,3 +96,8 @@ void MainWindow::on_actionSelect_Objects_triggered()
 {
     m_core.selectObject();
 }
+
+void MainWindow::on_actionSelect_Points_triggered()
+{
+    m_core.selectPoints();
+}
