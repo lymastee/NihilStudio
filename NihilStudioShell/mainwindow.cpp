@@ -101,3 +101,18 @@ void MainWindow::on_actionSelect_Points_triggered()
 {
     m_core.selectPoints();
 }
+
+void MainWindow::on_actionTranslate_triggered()
+{
+    m_core.translateModifier();
+}
+
+void MainWindow::on_actionRotate_triggered()
+{
+    m_core.rotateModifier();
+}
+
+void MainWindow::on_actionScale_triggered()
+{
+    m_core.scaleModifier();
+}

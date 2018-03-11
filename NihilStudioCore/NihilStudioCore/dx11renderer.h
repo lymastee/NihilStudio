@@ -134,5 +134,4 @@ private:
     void setupConstantBufferForGeometry(NihilDx11Geometry* geometry);
 };
 
-
 #endif

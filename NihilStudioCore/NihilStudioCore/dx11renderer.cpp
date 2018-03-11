@@ -95,7 +95,7 @@ bool NihilDx11Geometry::updateVertexStream(NihilVertex vertices[], int size)
     D3D11_MAPPED_SUBRESOURCE mappedRes;
     ZeroMemory(&mappedRes, sizeof(mappedRes));
     immContext->Map(m_vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedRes);
-    // todo:
+    memcpy_s(mappedRes.pData, sizeof(NihilVertex) * size, vertices, sizeof(NihilVertex) * size);
     immContext->Unmap(m_vb, 0);
     return true;
 }
@@ -204,10 +204,13 @@ void NihilDx11UIObject::setupIndexVertexBuffers(NihilDx11Renderer* renderer)
     switch (m_topology)
     {
     case Topo_Points:
-        context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);
+        context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
         break;
     case Topo_LineList:
-        context->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_LINELIST);
+        context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+        break;
+    case Topo_TriangleList:
+        context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         break;
     default:
         ASSERT(!"Unexpected topology.");

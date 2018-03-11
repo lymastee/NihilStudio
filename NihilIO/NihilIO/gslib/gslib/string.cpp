@@ -306,8 +306,16 @@ static void frac_to_string(_std_string<char>& str, double frac, int precision)
     }
     assert(ptd <= 0);
     if(ptd < 0) {
-        str.append(-ptd, '0');
-        len += ptd;
+        if (-ptd > precision)
+        {
+            str.append(precision, '0');
+            return;
+        }
+        else
+        {
+            str.append(-ptd, '0');
+            len += ptd;
+        }
     }
     str.append(szf, len);
 }
