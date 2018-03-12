@@ -96,6 +96,9 @@
    <property name="text">
     <string>Select Objects</string>
    </property>
+   <property name="shortcut">
+    <string>Q</string>
+   </property>
   </action>
   <action name="actionSave">
    <property name="text">
@@ -106,10 +109,16 @@
    <property name="text">
     <string>Select Points</string>
    </property>
+   <property name="shortcut">
+    <string>A</string>
+   </property>
   </action>
   <action name="actionTranslate">
    <property name="text">
     <string>Translate</string>
+   </property>
+   <property name="shortcut">
+    <string>W</string>
    </property>
   </action>
   <action name="actionRotate">
@@ -154,6 +163,9 @@
    </property>
    <property name="toolTip">
     <string>Rotate|zoom|translate the scene.</string>
+   </property>
+   <property name="shortcut">
+    <string>V</string>
    </property>
   </action>
  </widget>
