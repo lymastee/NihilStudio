@@ -138,7 +138,7 @@ public:
     NihilGeometry* getGeometry() const { return m_geometry; }
     const gs::matrix& getLocalMat() const { return m_localMat; }
     void setLocalMat(const gs::matrix& mat) { m_localMat = mat; }
-    void appendTranslation(const gs::vec3& ofs);
+    virtual void appendTranslation(const gs::vec3& ofs);
     // bridge
     virtual void setSelected(bool b) { if (m_geometry) m_geometry->setSelected(b); }
     virtual bool isSelected() const { return m_geometry ? m_geometry->isSelected() : false; }
@@ -192,6 +192,7 @@ public:
     virtual void updateBuffers() override;
     virtual void setSelected(bool b) override;
     virtual bool isSelected() const override;
+    virtual void appendTranslation(const gs::vec3& ofs) override;
 
 protected:
     NihilRenderer*          m_renderer = nullptr;
@@ -223,6 +224,7 @@ public:
     virtual void updateBuffers() override;
     virtual void setSelected(bool b) override;
     virtual bool isSelected() const override;
+    virtual void appendTranslation(const gs::vec3& ofs) override;
     int loadBiCubicNURBSFromTextStream(const NihilString& src, int start);
 
 protected:

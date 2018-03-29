@@ -778,6 +778,13 @@ bool NihilBiCubicBezierPatch::isSelected() const
     return m_gridMesh ? m_gridMesh->isSelected() : false;
 }
 
+void NihilBiCubicBezierPatch::appendTranslation(const gs::vec3& ofs)
+{
+    __super::appendTranslation(ofs);
+    if (m_gridMesh)
+        m_gridMesh->appendTranslation(ofs);
+}
+
 int NihilBiCubicBezierPatch::loadCvsSectionFromTextStream(const NihilString& src, int start)
 {
     int next = enterSection(src, start);
@@ -1041,6 +1048,13 @@ void NihilBiCubicNURBSurface::setSelected(bool b)
 bool NihilBiCubicNURBSurface::isSelected() const
 {
     return m_gridMesh ? m_gridMesh->isSelected() : false;
+}
+
+void NihilBiCubicNURBSurface::appendTranslation(const gs::vec3& ofs)
+{
+    __super::appendTranslation(ofs);
+    if (m_gridMesh)
+        m_gridMesh->appendTranslation(ofs);
 }
 
 int NihilBiCubicNURBSurface::loadBiCubicNURBSFromTextStream(const NihilString& src, int start)
